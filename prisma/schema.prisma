@@ -1,0 +1,210 @@
+// Prisma Schema - PhoneMarket
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  SELLER
+  BUYER
+}
+
+enum ListingStatus {
+  DRAFT      // Mới tạo, chưa đăng
+  ACTIVE     // Đang rao bán
+  RESERVED   // Đang giữ chỗ (đang trong giao dịch)
+  SOLD       // Đã bán
+  REMOVED    // Bị xóa/ẩn
+}
+
+enum DeviceCondition {
+  NEW        // Mới 100%
+  LIKE_NEW   // Như mới (99%)
+  GOOD       // Tốt (90-98%)
+  FAIR       // Khá (70-89%)
+  POOR       // Kém (<70%)
+}
+
+enum TransactionStatus {
+  PENDING    // Buyer vừa đặt mua, chưa thanh toán
+  ESCROWED   // Đã thanh toán, tiền đang tạm giữ
+  COMPLETED  // Giao dịch hoàn tất, tiền giải ngân
+  REFUNDED   // Hoàn tiền cho Buyer
+  DISPUTED   // Đang tranh chấp
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?  // null nếu đăng nhập qua OAuth
+  googleId     String?  @unique
+  role         Role     @default(BUYER)
+  name         String
+  phone        String?
+  address      String?
+  avatar       String?
+  isBanned     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  listings           Listing[]        @relation("SellerListings")
+  buyerTransactions  Transaction[]    @relation("BuyerTransactions")
+  sellerTransactions Transaction[]    @relation("SellerTransactions")
+  sentMessages       Message[]        @relation("SentMessages")
+  buyerConversations Conversation[]   @relation("BuyerConversations")
+  sellerConversations Conversation[]  @relation("SellerConversations")
+
+  @@index([email])
+  @@index([googleId])
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  listings  Listing[]
+  createdAt DateTime   @default(now())
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+model Listing {
+  id            String          @id @default(cuid())
+  sellerId      String
+  seller        User            @relation("SellerListings", fields: [sellerId], references: [id])
+  categoryId    String
+  category      Category        @relation(fields: [categoryId], references: [id])
+
+  title         String
+  description   String
+  condition     DeviceCondition
+  askingPrice   Int             // Giá người bán đặt (VND)
+  status        ListingStatus   @default(DRAFT)
+
+  // Kết quả định giá AI (JSON)
+  aiPriceResult Json?           // { P_market, P_final, damageBreakdown, confidenceScore, priceRange }
+
+  // Thông tin thiết bị
+  brand         String          // Apple, Samsung, Xiaomi...
+  model         String          // iPhone 14, Galaxy S23...
+  storage       String?         // 128GB, 256GB...
+  color         String?
+
+  images        ListingImage[]
+  transactions  Transaction[]
+  conversations Conversation[]
+  priceHistory  PriceHistory[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([brand, model])
+}
+
+model ListingImage {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  order     Int      @default(0) // Thứ tự ảnh, ảnh đầu tiên là ảnh bìa
+  createdAt DateTime @default(now())
+
+  @@index([listingId])
+}
+
+model Transaction {
+  id         String            @id @default(cuid())
+  listingId  String
+  listing    Listing           @relation(fields: [listingId], references: [id])
+  buyerId    String
+  buyer      User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId   String
+  seller     User              @relation("SellerTransactions", fields: [sellerId], references: [id])
+
+  amount     Int               // Tổng tiền giao dịch (VND)
+  commission Int               @default(0) // Phí hoa hồng (VND)
+  status     TransactionStatus @default(PENDING)
+
+  // VNPAY
+  vnpayRef   String?           @unique // Mã tham chiếu VNPAY
+  vnpayData  Json?             // Raw data từ VNPAY IPN
+
+  confirmedByBuyer  Boolean  @default(false)
+  confirmedBySeller Boolean  @default(false)
+
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([vnpayRef])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  listingId String
+  listing   Listing   @relation(fields: [listingId], references: [id])
+  buyerId   String
+  buyer     User      @relation("BuyerConversations", fields: [buyerId], references: [id])
+  sellerId  String
+  seller    User      @relation("SellerConversations", fields: [sellerId], references: [id])
+
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([listingId, buyerId]) // Mỗi buyer chỉ có 1 cuộc trò chuyện với seller cho mỗi listing
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  content        String
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  listingId String?
+  listing   Listing? @relation(fields: [listingId], references: [id])
+
+  brand     String
+  model     String
+  source    String   // "ai_estimate" | "market_scrape" | "sold_price"
+  price     Int      // Giá (VND)
+
+  recordedAt DateTime @default(now())
+
+  @@index([brand, model])
+  @@index([recordedAt])
+}
