@@ -1,8 +1,8 @@
 # PhoneMarket — Website Mua Bán Điện Thoại Tích Hợp AI
 
 > **Đề tài:** Xây dựng Website Mua Bán và Trao Đổi Điện Thoại Tích Hợp AI Hỗ Trợ Định Giá Sản Phẩm
-> **Sinh viên thực hiện:** [Tên sinh viên]
-> **GVHD:** [Tên giáo viên hướng dẫn]
+> **Sinh viên thực hiện:** [Ngô Tuấn Huy]
+> **GVHD:** []
 
 ---
 
