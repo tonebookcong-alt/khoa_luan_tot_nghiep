@@ -7,3 +7,6 @@ dist/
 uploads/
 .DS_Store
 coverage/
+
+claude.md
+CLAUDE.md
