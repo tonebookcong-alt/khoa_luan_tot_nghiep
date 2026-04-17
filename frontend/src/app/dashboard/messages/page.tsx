@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, Send } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, getImageUrl } from '@/lib/utils';
@@ -11,6 +12,7 @@ interface Message {
   content: string;
   senderId: string;
   createdAt: string;
+  sender?: { id: string; name: string; avatar?: string };
 }
 
 interface Conversation {
@@ -21,9 +23,11 @@ interface Conversation {
   lastMessage?: { content: string; createdAt: string };
 }
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
 export default function MessagesPage() {
   const searchParams = useSearchParams();
-  const { user } = useAuthStore();
+  const { user, accessToken } = useAuthStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(searchParams.get('conversationId'));
   const [messages, setMessages] = useState<Message[]>([]);
@@ -31,9 +35,55 @@ export default function MessagesPage() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load danh sách cuộc trò chuyện
+  // ── Kết nối Socket.io ──
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const socket = io(`${BACKEND_URL}/chat`, {
+      auth: { token: accessToken },
+      transports: ['websocket'],
+    });
+
+    socketRef.current = socket;
+
+    socket.on('message_received', (msg: Message) => {
+      setMessages((prev) => {
+        // Tránh duplicate nếu message do chính mình gửi qua socket
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    });
+
+    socket.on('user_typing', ({ isTyping: typing }: { userId: string; isTyping: boolean }) => {
+      setIsTyping(typing);
+      if (typing) {
+        // Tự reset typing indicator sau 3 giây
+        setTimeout(() => setIsTyping(false), 3000);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [accessToken]);
+
+  // ── Join/leave conversation room ──
+  useEffect(() => {
+    if (!socketRef.current || !activeId) return;
+    socketRef.current.emit('join_conversation', { conversationId: activeId });
+
+    return () => {
+      socketRef.current?.emit('leave_conversation', { conversationId: activeId });
+    };
+  }, [activeId]);
+
+  // ── Load danh sách cuộc trò chuyện ──
   useEffect(() => {
     api.get<Conversation[]>('/conversations')
       .then((r) => setConversations(r.data))
@@ -41,30 +91,49 @@ export default function MessagesPage() {
       .finally(() => setLoadingConvs(false));
   }, []);
 
-  // Load tin nhắn khi chọn conversation
+  // ── Load tin nhắn khi chọn conversation ──
   useEffect(() => {
     if (!activeId) return;
     setLoadingMsgs(true);
+    setMessages([]);
     api.get<Message[]>(`/conversations/${activeId}/messages`)
       .then((r) => setMessages(r.data))
       .catch(() => setMessages([]))
       .finally(() => setLoadingMsgs(false));
   }, [activeId]);
 
-  // Scroll xuống cuối khi có tin nhắn mới
+  // ── Scroll xuống cuối ──
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim() || !activeId || sending) return;
+    const content = input.trim();
+    setInput('');
     setSending(true);
-    try {
-      const res = await api.post<Message>(`/conversations/${activeId}/messages`, { content: input.trim() });
-      setMessages((prev) => [...prev, res.data]);
-      setInput('');
-    } catch { /* ignore */ }
-    finally { setSending(false); }
+
+    // Gửi qua Socket.io (real-time); server sẽ broadcast message_received
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('send_message', { conversationId: activeId, content });
+      setSending(false);
+    } else {
+      // Fallback REST nếu socket chưa kết nối
+      try {
+        const res = await api.post<Message>(`/conversations/${activeId}/messages`, { content });
+        setMessages((prev) => [...prev, res.data]);
+      } catch { /* ignore */ }
+      finally { setSending(false); }
+    }
+  };
+
+  const handleTyping = () => {
+    if (!socketRef.current || !activeId) return;
+    socketRef.current.emit('user_typing', { conversationId: activeId, isTyping: true });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current?.emit('user_typing', { conversationId: activeId, isTyping: false });
+    }, 2000);
   };
 
   const activeConv = conversations.find((c) => c.id === activeId);
@@ -74,7 +143,7 @@ export default function MessagesPage() {
 
   return (
     <div className="flex h-[calc(100vh-72px)] pt-[72px]">
-      {/* ── Sidebar: danh sách conversation ── */}
+      {/* ── Sidebar ── */}
       <aside className="w-80 flex-shrink-0 border-r border-purple-100 bg-white flex flex-col">
         <div className="px-5 py-4 border-b border-purple-100">
           <h1 className="text-lg font-extrabold text-slate-900 font-headline">Tin nhắn</h1>
@@ -125,7 +194,7 @@ export default function MessagesPage() {
         )}
       </aside>
 
-      {/* ── Main: chat window ── */}
+      {/* ── Chat window ── */}
       <main className="flex-1 flex flex-col bg-[#F5F3FF]">
         {!activeId ? (
           <div className="flex flex-1 items-center justify-center flex-col gap-3">
@@ -149,6 +218,9 @@ export default function MessagesPage() {
                   <p className="text-xs text-slate-400 truncate max-w-xs">{activeConv.listing.title}</p>
                 )}
               </div>
+              {isTyping && (
+                <span className="ml-auto text-xs text-slate-400 italic">đang nhập...</span>
+              )}
             </div>
 
             {/* Messages */}
@@ -185,7 +257,7 @@ export default function MessagesPage() {
             <div className="px-6 py-4 bg-white border-t border-purple-100 flex items-center gap-3">
               <input
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => { setInput(e.target.value); handleTyping(); }}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 placeholder="Nhập tin nhắn..."
                 className="flex-1 rounded-full border border-purple-100 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"

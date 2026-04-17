@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PROTECTED_ROUTES = ['/dashboard', '/profile', '/listings/create'];
+const PROTECTED_ROUTES = ['/dashboard', '/profile', '/listings/create', '/admin'];
 const SELLER_ONLY_ROUTES = ['/listings/create', '/dashboard'];
 const AUTH_ROUTES = ['/login', '/register'];
 

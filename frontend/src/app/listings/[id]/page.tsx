@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { formatPrice, formatDate, getImageUrl } from '@/lib/utils';
 import { ListingImageGallery } from '@/components/listings/ListingImageGallery';
 import { ContactSellerButton } from '@/components/listings/ContactSellerButton';
+import { BuyNowButton } from '@/components/listings/BuyNowButton';
 
 async function getListing(id: string): Promise<Listing | null> {
   try {
@@ -103,6 +104,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             </Link>
 
             <div className="mt-4 space-y-2">
+              <BuyNowButton listingId={listing.id} sellerId={listing.seller.id} listingStatus={listing.status} />
               <ContactSellerButton listingId={listing.id} sellerId={listing.seller.id} />
               <Button variant="outline" className="w-full" asChild>
                 <Link href={`/users/${listing.seller.id}`}>Xem trang người bán</Link>
