@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -62,5 +64,17 @@ export class UsersController {
   @ApiOperation({ summary: '[Admin] Cập nhật role hoặc ban user' })
   adminUpdate(@Param('id') id: string, @Body() dto: AdminUpdateUserDto) {
     return this.usersService.adminUpdate(id, dto);
+  }
+
+  @Post('block/:blockedId')
+  @ApiOperation({ summary: 'Chặn người dùng' })
+  blockUser(@CurrentUser() user: JwtPayload, @Param('blockedId') blockedId: string) {
+    return this.usersService.blockUser(user.sub, blockedId);
+  }
+
+  @Delete('block/:blockedId')
+  @ApiOperation({ summary: 'Bỏ chặn người dùng' })
+  unblockUser(@CurrentUser() user: JwtPayload, @Param('blockedId') blockedId: string) {
+    return this.usersService.unblockUser(user.sub, blockedId);
   }
 }

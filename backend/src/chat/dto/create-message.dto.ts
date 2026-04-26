@@ -1,10 +1,10 @@
-import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsOptional, MaxLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateMessageDto {
-  @ApiProperty({ description: 'Nội dung tin nhắn' })
+  @ApiPropertyOptional({ description: 'Nội dung tin nhắn (bỏ trống khi gửi media)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(2000)
-  content: string;
+  content?: string;
 }

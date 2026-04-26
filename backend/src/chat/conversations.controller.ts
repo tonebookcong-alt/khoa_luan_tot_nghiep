@@ -4,14 +4,27 @@ import {
   Post,
   Body,
   Param,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
+
+const chatStorage = diskStorage({
+  destination: './uploads',
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `chat-${unique}${extname(file.originalname)}`);
+  },
+});
 
 @ApiTags('Conversations')
 @ApiBearerAuth()
@@ -39,12 +52,15 @@ export class ConversationsController {
   }
 
   @Post(':id/messages')
-  @ApiOperation({ summary: 'Gửi tin nhắn (REST fallback)' })
+  @ApiOperation({ summary: 'Gửi tin nhắn (REST fallback, hỗ trợ file)' })
+  @UseInterceptors(FileInterceptor('file', { storage: chatStorage }))
   sendMessage(
     @Param('id') id: string,
     @Body() dto: CreateMessageDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.conversationsService.createMessage(id, user.sub, dto.content);
+    const mediaUrl = file ? `/uploads/${file.filename}` : undefined;
+    return this.conversationsService.createMessage(id, user.sub, dto.content ?? '', mediaUrl);
   }
 }

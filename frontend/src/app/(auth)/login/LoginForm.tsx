@@ -44,7 +44,8 @@ export function LoginForm() {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
+    const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+    window.location.href = `${base}/api/auth/google`;
   };
 
   return (

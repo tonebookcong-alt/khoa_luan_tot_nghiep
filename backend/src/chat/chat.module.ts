@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
+import { UsersModule } from '../users/users.module';
 import { ConversationsService } from './conversations.service';
 import { ConversationsController } from './conversations.controller';
 import { ChatGateway } from './chat.gateway';
@@ -9,6 +10,7 @@ import { ChatGateway } from './chat.gateway';
 @Module({
   imports: [
     PrismaModule,
+    UsersModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

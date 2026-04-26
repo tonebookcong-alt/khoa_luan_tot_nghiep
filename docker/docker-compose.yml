@@ -86,6 +86,18 @@ services:
       redis:
         condition: service_healthy
 
+  ai-service-vision:
+    build:
+      context: ../ai-service-vision
+      dockerfile: Dockerfile
+    container_name: phonemarket_ai_vision
+    restart: unless-stopped
+    env_file: ../ai-service-vision/.env
+    ports:
+      - '8000:8000'
+    volumes:
+      - ../ai-service-vision/app/models:/app/app/models:ro
+
   frontend:
     build:
       context: ../frontend

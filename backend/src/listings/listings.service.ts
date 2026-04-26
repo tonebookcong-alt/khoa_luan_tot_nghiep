@@ -30,6 +30,7 @@ export class ListingsService {
         warranty: dto.warranty,
         iphoneVersion: dto.iphoneVersion,
         location: dto.location,
+        accessories: dto.accessories,
         images: {
           create: files.map((file, index) => ({
             url: `/uploads/${file.filename}`,
@@ -47,6 +48,8 @@ export class ListingsService {
       search,
       categoryId,
       brand,
+      sellerId,
+      location,
       condition,
       minPrice,
       maxPrice,
@@ -59,6 +62,7 @@ export class ListingsService {
     const where: Prisma.ListingWhereInput = {
       // Non-admin users only see ACTIVE listings
       status: role === Role.ADMIN && status ? status : ListingStatus.ACTIVE,
+      ...(sellerId && { sellerId }),
       ...(search && {
         OR: [
           { title: { contains: search, mode: 'insensitive' } },
@@ -68,6 +72,7 @@ export class ListingsService {
       }),
       ...(categoryId && { categoryId }),
       ...(brand && { brand: { equals: brand, mode: 'insensitive' } }),
+      ...(location && { location: { contains: location, mode: 'insensitive' } }),
       ...(condition && { condition }),
       ...((minPrice !== undefined || maxPrice !== undefined) && {
         askingPrice: {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
@@ -60,5 +60,39 @@ export class UsersService {
     });
     const { passwordHash: _, ...rest } = user;
     return rest;
+  }
+
+  async blockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) throw new BadRequestException('Không thể tự chặn mình');
+    const target = await this.prisma.user.findUnique({ where: { id: blockedId }, select: { id: true } });
+    if (!target) throw new NotFoundException('Người dùng không tồn tại');
+    await this.prisma.block.upsert({
+      where: { blockerId_blockedId: { blockerId, blockedId } },
+      create: { blockerId, blockedId },
+      update: {},
+    });
+    return { blocked: true };
+  }
+
+  async unblockUser(blockerId: string, blockedId: string) {
+    await this.prisma.block.deleteMany({ where: { blockerId, blockedId } });
+    return { blocked: false };
+  }
+
+  async getBlockStatus(viewerId: string, otherUserId: string): Promise<'none' | 'i_blocked' | 'i_am_blocked'> {
+    const [iBlocked, iAmBlocked] = await Promise.all([
+      this.prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: viewerId, blockedId: otherUserId } } }),
+      this.prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: otherUserId, blockedId: viewerId } } }),
+    ]);
+    if (iBlocked) return 'i_blocked';
+    if (iAmBlocked) return 'i_am_blocked';
+    return 'none';
+  }
+
+  async isBlockedBetween(userA: string, userB: string): Promise<boolean> {
+    const count = await this.prisma.block.count({
+      where: { OR: [{ blockerId: userA, blockedId: userB }, { blockerId: userB, blockedId: userA }] },
+    });
+    return count > 0;
   }
 }

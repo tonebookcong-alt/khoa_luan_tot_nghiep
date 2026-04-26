@@ -35,6 +35,7 @@ interface AiPricingData {
   summary: string
   marketSummary: string
   dataPoints: number
+  imageType?: 'real_device' | 'marketing' | 'unclear'
 }
 
 interface Props {
@@ -72,8 +73,26 @@ export function AiPricingResult({ data, onUsePrice }: Props) {
     return 'Nghiêm trọng'
   }
 
+  const isNonRealImage = data.imageType === 'marketing' || data.imageType === 'unclear'
+
   return (
     <div className="rounded-3xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white p-6 shadow-sm space-y-5">
+      {/* Warning banner — ảnh quảng cáo */}
+      {isNonRealImage && (
+        <div className="flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-4">
+          <span className="material-symbols-outlined text-amber-500 mt-0.5 shrink-0">warning</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              {data.imageType === 'marketing' ? 'Phát hiện ảnh quảng cáo' : 'Ảnh không rõ ràng'}
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              AI không thể đánh giá hư hỏng từ {data.imageType === 'marketing' ? 'ảnh quảng cáo/sản phẩm mới' : 'ảnh này'}.
+              Hãy tải lên ảnh chụp thực tế thiết bị của bạn để nhận kết quả định giá chính xác.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">
@@ -86,9 +105,13 @@ export function AiPricingResult({ data, onUsePrice }: Props) {
           </p>
         </div>
         {/* Confidence badge */}
-        <div className="ml-auto flex items-center gap-1.5 rounded-full bg-white border border-purple-100 px-3 py-1">
-          <span className="material-symbols-outlined text-sm text-primary">verified</span>
-          <span className="text-xs font-bold text-primary">{confidencePct}% tin cậy</span>
+        <div className={`ml-auto flex items-center gap-1.5 rounded-full bg-white border px-3 py-1 ${isNonRealImage ? 'border-amber-200' : 'border-purple-100'}`}>
+          <span className={`material-symbols-outlined text-sm ${isNonRealImage ? 'text-amber-500' : 'text-primary'}`}>
+            {isNonRealImage ? 'info' : 'verified'}
+          </span>
+          <span className={`text-xs font-bold ${isNonRealImage ? 'text-amber-600' : 'text-primary'}`}>
+            {confidencePct}% tin cậy
+          </span>
         </div>
       </div>
 

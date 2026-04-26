@@ -36,6 +36,11 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Auth endpoints return 401 intentionally (wrong password, expired refresh, etc.) — don't intercept
+    if (original.url?.includes('/auth/')) {
+      return Promise.reject(error);
+    }
+
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
@@ -51,10 +56,7 @@ api.interceptors.response.use(
     const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
     if (!refreshToken) {
       isRefreshing = false;
-      if (typeof window !== 'undefined') {
-        localStorage.clear();
-        window.location.href = '/login';
-      }
+      // No refresh token = guest user or already logged out — don't redirect, just reject
       return Promise.reject(error);
     }
 

@@ -6,31 +6,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 
-const CONVERSATION_SELECT = {
+const MSG_SELECT = {
   id: true,
-  listingId: true,
+  content: true,
+  mediaUrl: true,
+  senderId: true,
+  isRead: true,
   createdAt: true,
-  updatedAt: true,
-  listing: {
-    select: {
-      id: true,
-      title: true,
-      images: { select: { url: true }, take: 1 },
-    },
-  },
-  buyer: { select: { id: true, name: true, avatar: true } },
-  seller: { select: { id: true, name: true, avatar: true } },
-  messages: {
-    orderBy: { createdAt: 'desc' as const },
-    take: 1,
-    select: { content: true, createdAt: true },
-  },
-};
+  sender: { select: { id: true, name: true, avatar: true } },
+} as const;
 
 @Injectable()
 export class ConversationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private usersService: UsersService) {}
 
   async create(listingId: string, buyerId: string) {
     const listing = await this.prisma.listing.findUnique({
@@ -58,20 +48,63 @@ export class ConversationsService {
     const convs = await this.prisma.conversation.findMany({
       where: { OR: [{ buyerId: userId }, { sellerId: userId }] },
       orderBy: { updatedAt: 'desc' },
-      select: CONVERSATION_SELECT,
+      select: {
+        id: true,
+        listingId: true,
+        createdAt: true,
+        updatedAt: true,
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            askingPrice: true,
+            images: { select: { url: true }, orderBy: { order: 'asc' }, take: 1 },
+          },
+        },
+        buyer: { select: { id: true, name: true, avatar: true } },
+        seller: { select: { id: true, name: true, avatar: true } },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { content: true, mediaUrl: true, createdAt: true, senderId: true },
+        },
+        _count: {
+          select: {
+            messages: { where: { isRead: false, senderId: { not: userId } } },
+          },
+        },
+      },
     });
 
-    return convs.map((c) => ({
-      ...c,
+    const blockStatuses = await Promise.all(
+      convs.map((c) => {
+        const otherId = c.buyer.id === userId ? c.seller.id : c.buyer.id;
+        return this.usersService.getBlockStatus(userId, otherId);
+      }),
+    );
+
+    return convs.map((c, i) => ({
+      id: c.id,
+      listing: c.listing,
+      buyer: c.buyer,
+      seller: c.seller,
       lastMessage: c.messages[0] ?? null,
-      messages: undefined,
+      unreadCount: c._count.messages,
+      blockStatus: blockStatuses[i],
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
     }));
   }
 
   async findOne(id: string, userId: string) {
     const conv = await this.prisma.conversation.findUnique({
       where: { id },
-      select: CONVERSATION_SELECT,
+      select: {
+        id: true,
+        listing: { select: { id: true, title: true, askingPrice: true, images: { select: { url: true }, take: 1 } } },
+        buyer: { select: { id: true, name: true, avatar: true } },
+        seller: { select: { id: true, name: true, avatar: true } },
+      },
     });
     if (!conv) throw new NotFoundException('Cuộc trò chuyện không tồn tại');
     if (conv.buyer.id !== userId && conv.seller.id !== userId)
@@ -80,19 +113,12 @@ export class ConversationsService {
   }
 
   async getMessages(conversationId: string, userId: string) {
-    await this.findOne(conversationId, userId); // auth check
+    await this.findOne(conversationId, userId);
 
     const messages = await this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        content: true,
-        senderId: true,
-        isRead: true,
-        createdAt: true,
-        sender: { select: { id: true, name: true, avatar: true } },
-      },
+      select: MSG_SELECT,
     });
 
     // Mark unread messages as read
@@ -104,22 +130,22 @@ export class ConversationsService {
     return messages;
   }
 
-  async createMessage(conversationId: string, senderId: string, content: string) {
-    await this.findOne(conversationId, senderId); // auth check
+  async createMessage(conversationId: string, senderId: string, content: string, mediaUrl?: string) {
+    const conv = await this.findOne(conversationId, senderId);
+    const receiverId = conv.buyer.id === senderId ? conv.seller.id : conv.buyer.id;
+    const isBlocked = await this.usersService.isBlockedBetween(senderId, receiverId);
+    if (isBlocked) throw new ForbiddenException('Không thể nhắn tin do bị chặn');
 
     const message = await this.prisma.message.create({
-      data: { conversationId, senderId, content },
-      select: {
-        id: true,
-        content: true,
-        senderId: true,
-        isRead: true,
-        createdAt: true,
-        sender: { select: { id: true, name: true, avatar: true } },
+      data: {
+        conversationId,
+        senderId,
+        content,
+        ...(mediaUrl && { mediaUrl }),
       },
+      select: MSG_SELECT,
     });
 
-    // Update conversation updatedAt
     await this.prisma.conversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },

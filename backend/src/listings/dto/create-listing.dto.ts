@@ -73,4 +73,9 @@ export class CreateListingDto {
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional({ example: 'Củ sạc, Cáp sạc' })
+  @IsOptional()
+  @IsString()
+  accessories?: string;
 }

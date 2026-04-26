@@ -26,6 +26,7 @@ const schema = z.object({
   warranty: z.string().optional(),
   iphoneVersion: z.string().optional(),
   location: z.string().optional(),
+  accessories: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -41,6 +42,7 @@ interface AiPricingData {
   summary: string;
   marketSummary: string;
   dataPoints: number;
+  imageType?: 'real_device' | 'marketing' | 'unclear';
 }
 
 const CONDITIONS = [
@@ -588,6 +590,8 @@ export default function CreateListingPage() {
   });
 
   const [customModel, setCustomModel] = useState('');
+  const [hasAccessories, setHasAccessories] = useState<boolean | null>(null);
+  const [accessoryItems, setAccessoryItems] = useState<string[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addrProvince, setAddrProvince] = useState('');
   const [addrDistrict, setAddrDistrict] = useState('');
@@ -604,6 +608,22 @@ export default function CreateListingPage() {
     setValue('model', '');
     setCustomModel('');
   }, [watchedBrand, setValue]);
+
+  const toggleAccessory = (item: string) => {
+    setAccessoryItems((prev) => {
+      const next = prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item];
+      setValue('accessories', next.length > 0 ? next.join(', ') : undefined);
+      return next;
+    });
+  };
+
+  const handleAccessoryToggle = (value: boolean) => {
+    setHasAccessories(value);
+    if (!value) {
+      setAccessoryItems([]);
+      setValue('accessories', undefined);
+    }
+  };
 
   const handleAddressConfirm = () => {
     setAddrSubmitTried(true);
@@ -852,6 +872,42 @@ export default function CreateListingPage() {
             </div>
           </div>
 
+
+          {/* Phụ kiện */}
+          <div>
+            <Label>Phụ kiện kèm theo</Label>
+            <div className="mt-2 flex gap-2">
+              {[true, false].map((val) => (
+                <button
+                  key={String(val)}
+                  type="button"
+                  onClick={() => handleAccessoryToggle(val)}
+                  className={`rounded-full border px-5 py-1.5 text-xs font-bold transition-colors ${
+                    hasAccessories === val
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-purple-100 text-slate-600 hover:border-primary/40'
+                  }`}
+                >
+                  {val ? 'Có' : 'Không'}
+                </button>
+              ))}
+            </div>
+            {hasAccessories && (
+              <div className="mt-3 flex gap-4">
+                {['Củ sạc', 'Cáp sạc'].map((item) => (
+                  <label key={item} className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={accessoryItems.includes(item)}
+                      onChange={() => toggleAccessory(item)}
+                      className="h-4 w-4 rounded accent-primary cursor-pointer"
+                    />
+                    <span className="text-sm text-slate-700">{item}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div>
             <Label>Tình trạng máy</Label>

@@ -70,9 +70,24 @@ model User {
   sentMessages       Message[]        @relation("SentMessages")
   buyerConversations Conversation[]   @relation("BuyerConversations")
   sellerConversations Conversation[]  @relation("SellerConversations")
+  blocksGiven        Block[]          @relation("BlocksGiven")
+  blocksReceived     Block[]          @relation("BlocksReceived")
 
   @@index([email])
   @@index([googleId])
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("BlocksGiven", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }
 
 model Category {
@@ -114,6 +129,7 @@ model Listing {
   warranty      String?         // Chính sách bảo hành: Hết bảo hành, 1 tháng, Còn bảo hành...
   iphoneVersion String?         // Quốc tế / Khoá mạng (chỉ Apple)
   location      String?         // Địa chỉ người bán
+  accessories   String?         // Phụ kiện kèm theo, VD: "Củ sạc, Cáp sạc"
 
   images        ListingImage[]
   transactions  Transaction[]
@@ -196,6 +212,7 @@ model Message {
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
 
   content        String
+  mediaUrl       String?      // URL ảnh/video đính kèm
   isRead         Boolean      @default(false)
   createdAt      DateTime     @default(now())
 

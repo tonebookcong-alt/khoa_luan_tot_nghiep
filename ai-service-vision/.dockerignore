@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+data/
+notebooks/
+scripts/
+tests/
+runs/
+wandb/
+*.log
+.env
+.env.local
+.git/

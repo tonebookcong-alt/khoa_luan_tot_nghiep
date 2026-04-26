@@ -9,7 +9,18 @@ export function Header() {
   const { user, logout, isAuthenticated } = useAuthStore();
   // Prevent hydration mismatch: chỉ render auth UI sau khi client mount
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const [totalUnread, setTotalUnread] = useState(0);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !isAuthenticated()) return;
+    api.get<{ unreadCount: number }[]>('/conversations')
+      .then((r) => setTotalUnread(r.data.reduce((s, c) => s + (c.unreadCount ?? 0), 0)))
+      .catch(() => {});
+  }, [mounted, isAuthenticated]);
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -17,6 +28,7 @@ export function Header() {
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && search.trim()) {
       router.push(`/listings?search=${encodeURIComponent(search.trim())}`);
+      setSearch('');
     }
   };
 
@@ -59,9 +71,14 @@ export function Header() {
                 <span className="material-symbols-outlined">package_2</span>
                 <span className="text-[10px] font-bold uppercase tracking-tighter">Tin đăng</span>
               </Link>
-              <Link href="/dashboard/messages" className="flex flex-col items-center gap-0.5 text-slate-600 hover:text-primary transition-colors">
-                <span className="material-symbols-outlined">chat_bubble</span>
-                <span className="text-[10px] font-bold uppercase tracking-tighter">Tin nhắn</span>
+              <Link href="/dashboard/messages" className="relative flex flex-col items-center gap-0.5 text-slate-600 hover:text-primary transition-colors px-1 py-0.5">
+                <span className="material-symbols-outlined pointer-events-none">chat_bubble</span>
+                {totalUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none pointer-events-none">
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
+                )}
+                <span className="text-[10px] font-bold uppercase tracking-tighter pointer-events-none">Tin nhắn</span>
               </Link>
               <Link href="/listings/create" className="relative flex flex-col items-center gap-0.5 text-slate-600 hover:text-primary transition-colors">
                 <span className="material-symbols-outlined">add_circle</span>

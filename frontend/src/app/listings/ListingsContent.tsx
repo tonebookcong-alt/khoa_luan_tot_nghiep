@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { SlidersHorizontal, ChevronDown, ChevronUp, X, MapPin } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, ChevronUp, X } from 'lucide-react';
 import {
   siApple, siSamsung, siXiaomi, siOppo, siVivo, siHonor,
   siGoogle, siHuawei, siOneplus, siNokia, siAsus, siLenovo,
@@ -185,6 +185,7 @@ export function ListingsContent() {
 
   const search    = searchParams.get('search')    ?? '';
   const brand     = searchParams.get('brand')     ?? '';
+  const location  = searchParams.get('location')  ?? '';
   const condition = (searchParams.get('condition') ?? '') as DeviceCondition | '';
   const sort      = searchParams.get('sort')      ?? 'newest';
   const page      = Number(searchParams.get('page') ?? '1');
@@ -218,6 +219,7 @@ export function ListingsContent() {
         const p = new URLSearchParams();
         if (search)              p.set('search', search);
         if (brand)               p.set('brand', brand);
+        if (location)            p.set('location', location);
         if (condition)           p.set('condition', condition);
         if (minPrice > PRICE_MIN) p.set('minPrice', String(minPrice));
         if (maxPrice < PRICE_MAX) p.set('maxPrice', String(maxPrice));
@@ -229,7 +231,7 @@ export function ListingsContent() {
       } catch { setListings([]); }
       finally  { setLoading(false); }
     })();
-  }, [search, brand, condition, sort, page, minPrice, maxPrice]);
+  }, [search, brand, location, condition, sort, page, minPrice, maxPrice]);
 
   const activeCount = [brand, condition].filter(Boolean).length;
   const priceActive = minPrice > PRICE_MIN || maxPrice < PRICE_MAX;
@@ -358,22 +360,27 @@ export function ListingsContent() {
           {/* Location row */}
           <div className="mb-5 flex flex-wrap items-center gap-2">
             <span className="text-sm text-slate-500 font-medium">Khu vực:</span>
-            {LOCATION_CHIPS.map((loc) => (
-              <button key={loc}
-                className="px-3 py-1 rounded-full border border-slate-200 text-xs font-medium text-slate-600 hover:border-primary hover:text-primary bg-white transition-colors">
-                {loc}
-              </button>
-            ))}
-            <button className="flex items-center gap-1 px-3 py-1 rounded-full border border-slate-200 text-xs font-medium text-slate-600 hover:border-primary hover:text-primary bg-white transition-colors">
-              <MapPin className="h-3 w-3" /> Gần tôi
-            </button>
+            {LOCATION_CHIPS.map((loc) => {
+              const active = location === loc;
+              return (
+                <button key={loc}
+                  onClick={() => updateParams({ location: active ? '' : loc })}
+                  className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+                    active
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary bg-white'
+                  }`}>
+                  {loc}
+                </button>
+              );
+            })}
           </div>
 
           {/* Results count */}
           <p className="mb-4 text-sm text-slate-500 font-medium">
             {loading ? 'Đang tải...' : `${total} kết quả`}
-            {(brand || condition || search || priceActive) && (
-              <button onClick={() => { setPriceRange([PRICE_MIN, PRICE_MAX]); updateParams({ brand: '', condition: '', search: '', minPrice: '', maxPrice: '' }); }}
+            {(brand || condition || location || search || priceActive) && (
+              <button onClick={() => { setPriceRange([PRICE_MIN, PRICE_MAX]); updateParams({ brand: '', condition: '', location: '', search: '', minPrice: '', maxPrice: '' }); }}
                 className="ml-3 text-xs text-primary hover:underline">
                 Xóa tất cả bộ lọc
               </button>

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -18,13 +18,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
+    if (!mounted) return;
     if (!isAuthenticated()) { router.replace('/login'); return; }
     if (user?.role !== 'ADMIN') { router.replace('/'); }
-  }, [user, isAuthenticated, router]);
+  }, [mounted, user, isAuthenticated, router]);
 
-  if (!user || user.role !== 'ADMIN') return null;
+  if (!mounted || !user || user.role !== 'ADMIN') return null;
 
   return (
     <div className="flex min-h-screen bg-gray-50">

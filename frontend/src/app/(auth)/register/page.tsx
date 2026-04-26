@@ -15,9 +15,9 @@ import { AuthResponse } from '@/types/api.types';
 
 const schema = z.object({
   name: z.string().min(2, 'Tên ít nhất 2 ký tự'),
-  email: z.string().email('Email không hợp lệ'),
+  email: z.string().min(1, 'Vui lòng nhập email').email('Email không hợp lệ'),
   password: z.string().min(6, 'Mật khẩu ít nhất 6 ký tự'),
-  confirmPassword: z.string(),
+  confirmPassword: z.string().min(1, 'Vui lòng xác nhận mật khẩu'),
   phone: z.string().optional(),
 }).refine((d) => d.password === d.confirmPassword, {
   message: 'Mật khẩu xác nhận không khớp',
@@ -69,7 +69,7 @@ export default function RegisterPage() {
 
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" className="mt-1" {...register('email')} />
+              <Input id="email" type="email" placeholder="you@example.com" className={`mt-1 ${errors.email ? 'border-red-400 focus:ring-red-100 focus:border-red-400' : ''}`} {...register('email')} />
               {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
             </div>
 
@@ -86,7 +86,7 @@ export default function RegisterPage() {
 
             <div>
               <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
-              <Input id="confirmPassword" type="password" placeholder="Nhập lại mật khẩu" className="mt-1" {...register('confirmPassword')} />
+              <Input id="confirmPassword" type="password" placeholder="Nhập lại mật khẩu" className={`mt-1 ${errors.confirmPassword ? 'border-red-400 focus:ring-red-100 focus:border-red-400' : ''}`} {...register('confirmPassword')} />
               {errors.confirmPassword && <p className="mt-1 text-xs text-red-600">{errors.confirmPassword.message}</p>}
             </div>
 

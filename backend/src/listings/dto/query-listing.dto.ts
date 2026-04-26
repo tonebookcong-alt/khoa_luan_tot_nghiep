@@ -19,6 +19,16 @@ export class QueryListingDto {
   @IsString()
   brand?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sellerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
   @ApiPropertyOptional({ enum: DeviceCondition })
   @IsOptional()
   @IsEnum(DeviceCondition)
