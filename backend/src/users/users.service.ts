@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PresenceService } from '../presence/presence.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { User, Prisma, Role } from '@prisma/client';
@@ -8,7 +9,20 @@ type UserWithoutPassword = Omit<User, 'passwordHash'>;
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private presence: PresenceService) {}
+
+  async findAdmins(excludeUserId?: string) {
+    const admins = await this.prisma.user.findMany({
+      where: {
+        role: Role.ADMIN,
+        isBanned: false,
+        ...(excludeUserId ? { NOT: { id: excludeUserId } } : {}),
+      },
+      select: { id: true, name: true, avatar: true, email: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return admins.map((a) => ({ ...a, isOnline: this.presence.isOnline(a.id) }));
+  }
 
   async findById(id: string): Promise<UserWithoutPassword> {
     const user = await this.prisma.user.findUnique({ where: { id } });

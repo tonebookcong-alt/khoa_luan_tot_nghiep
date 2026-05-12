@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConversationType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 
@@ -44,12 +45,45 @@ export class ConversationsService {
     });
   }
 
+  async createOrGetSupport(userId: string, adminId: string) {
+    if (userId === adminId)
+      throw new BadRequestException('Không thể tạo hỗ trợ với chính mình');
+
+    const admin = await this.prisma.user.findUnique({
+      where: { id: adminId },
+      select: { id: true, role: true, isBanned: true },
+    });
+    if (!admin || admin.role !== Role.ADMIN || admin.isBanned)
+      throw new NotFoundException('Admin không tồn tại');
+
+    const existing = await this.prisma.conversation.findFirst({
+      where: {
+        type: ConversationType.SUPPORT,
+        buyerId: userId,
+        sellerId: adminId,
+      },
+      select: { id: true },
+    });
+    if (existing) return { id: existing.id, created: false };
+
+    const created = await this.prisma.conversation.create({
+      data: {
+        type: ConversationType.SUPPORT,
+        buyerId: userId,
+        sellerId: adminId,
+      },
+      select: { id: true },
+    });
+    return { id: created.id, created: true };
+  }
+
   async findAllForUser(userId: string) {
     const convs = await this.prisma.conversation.findMany({
       where: { OR: [{ buyerId: userId }, { sellerId: userId }] },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
+        type: true,
         listingId: true,
         createdAt: true,
         updatedAt: true,
@@ -85,6 +119,7 @@ export class ConversationsService {
 
     return convs.map((c, i) => ({
       id: c.id,
+      type: c.type,
       listing: c.listing,
       buyer: c.buyer,
       seller: c.seller,
@@ -101,6 +136,7 @@ export class ConversationsService {
       where: { id },
       select: {
         id: true,
+        type: true,
         listing: { select: { id: true, title: true, askingPrice: true, images: { select: { url: true }, take: 1 } } },
         buyer: { select: { id: true, name: true, avatar: true } },
         seller: { select: { id: true, name: true, avatar: true } },

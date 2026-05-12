@@ -6,11 +6,13 @@ import { UsersModule } from '../users/users.module';
 import { ConversationsService } from './conversations.service';
 import { ConversationsController } from './conversations.controller';
 import { ChatGateway } from './chat.gateway';
+import { PresenceModule } from '../presence/presence.module';
 
 @Module({
   imports: [
     PrismaModule,
     UsersModule,
+    PresenceModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

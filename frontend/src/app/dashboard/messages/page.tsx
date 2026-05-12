@@ -20,7 +20,8 @@ interface Message {
 
 interface Conversation {
   id: string;
-  listing: { id: string; title: string; askingPrice: number; images: { url: string }[] };
+  type: 'LISTING' | 'SUPPORT';
+  listing: { id: string; title: string; askingPrice: number; images: { url: string }[] } | null;
   buyer: { id: string; name: string; avatar?: string };
   seller: { id: string; name: string; avatar?: string };
   lastMessage?: { content: string; mediaUrl?: string; createdAt: string; senderId: string } | null;
@@ -221,7 +222,7 @@ export default function MessagesPage() {
     if (search.length >= 3) {
       const other = conv.buyer.id === user?.id ? conv.seller : conv.buyer;
       const q = search.toLowerCase();
-      return other.name.toLowerCase().includes(q) || conv.listing.title.toLowerCase().includes(q);
+      return other.name.toLowerCase().includes(q) || (conv.listing?.title.toLowerCase().includes(q) ?? false);
     }
     return true;
   });
@@ -303,7 +304,8 @@ export default function MessagesPage() {
           <ul className="flex-1 overflow-y-auto">
             {filteredConvs.map((conv) => {
               const other = conv.buyer.id === user?.id ? conv.seller : conv.buyer;
-              const cover = conv.listing.images?.[0]?.url;
+              const cover = conv.listing?.images?.[0]?.url;
+              const isSupport = conv.type === 'SUPPORT';
               const isActive = conv.id === activeId;
               const hasUnread = conv.unreadCount > 0;
               const lastMsg = conv.lastMessage;
@@ -331,8 +333,13 @@ export default function MessagesPage() {
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <p className={`text-sm truncate ${hasUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
+                        <p className={`text-sm truncate flex items-center gap-1.5 ${hasUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
                           {other.name}
+                          {isSupport && (
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                              Hỗ trợ
+                            </span>
+                          )}
                         </p>
                         {lastMsg && (
                           <span className="text-[10px] text-slate-400 shrink-0">
@@ -405,7 +412,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Listing context card */}
-            {activeConv && (
+            {activeConv?.listing && (
               <div className="mx-4 mt-3 mb-1">
                 <Link
                   href={`/listings/${activeConv.listing.id}`}
@@ -426,6 +433,20 @@ export default function MessagesPage() {
                   </div>
                   <span className="material-symbols-outlined text-slate-300 text-lg flex-shrink-0">chevron_right</span>
                 </Link>
+              </div>
+            )}
+
+            {/* Support banner */}
+            {activeConv?.type === 'SUPPORT' && (
+              <div className="mx-4 mt-3 mb-1">
+                <div className="flex items-center gap-3 bg-purple-50 rounded-2xl border border-purple-100 px-4 py-2.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest bg-purple-600 text-white px-2 py-0.5 rounded">
+                    Hỗ trợ
+                  </span>
+                  <p className="text-xs text-purple-700 font-medium">
+                    Trò chuyện với quản trị viên. Bạn có thể gửi ảnh để mô tả vấn đề rõ hơn.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -596,36 +617,38 @@ export default function MessagesPage() {
                 })()}
               </div>
 
-              {/* Tin đang trao đổi */}
-              <div className="px-4 py-4 border-b border-slate-100">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-bold text-slate-900">Tin đang trao đổi</p>
-                  <Link href={`/listings/${activeConv.listing.id}`} className="text-slate-400 hover:text-primary transition-colors">
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                <div className="rounded-2xl border border-slate-100 overflow-hidden">
-                  {activeConv.listing.images?.[0]?.url ? (
-                    <img
-                      src={getImageUrl(activeConv.listing.images[0].url)}
-                      alt={activeConv.listing.title}
-                      className="w-full h-36 object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-36 bg-slate-100" />
-                  )}
-                  <div className="px-3 py-2.5">
-                    <p className="text-xs font-semibold text-slate-800 truncate">{activeConv.listing.title}</p>
-                    <p className="text-sm font-bold text-primary mt-0.5">{formatPrice(activeConv.listing.askingPrice)}</p>
-                    <Link
-                      href={`/listings/${activeConv.listing.id}`}
-                      className="mt-2 block w-full text-center rounded-xl border border-slate-200 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary transition-colors"
-                    >
-                      Xem tin đăng
+              {/* Tin đang trao đổi (chỉ hiển thị cho LISTING type) */}
+              {activeConv.listing && (
+                <div className="px-4 py-4 border-b border-slate-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-bold text-slate-900">Tin đang trao đổi</p>
+                    <Link href={`/listings/${activeConv.listing.id}`} className="text-slate-400 hover:text-primary transition-colors">
+                      <ChevronRight className="h-4 w-4" />
                     </Link>
                   </div>
+                  <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                    {activeConv.listing.images?.[0]?.url ? (
+                      <img
+                        src={getImageUrl(activeConv.listing.images[0].url)}
+                        alt={activeConv.listing.title}
+                        className="w-full h-36 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-36 bg-slate-100" />
+                    )}
+                    <div className="px-3 py-2.5">
+                      <p className="text-xs font-semibold text-slate-800 truncate">{activeConv.listing.title}</p>
+                      <p className="text-sm font-bold text-primary mt-0.5">{formatPrice(activeConv.listing.askingPrice)}</p>
+                      <Link
+                        href={`/listings/${activeConv.listing.id}`}
+                        className="mt-2 block w-full text-center rounded-xl border border-slate-200 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary transition-colors"
+                      >
+                        Xem tin đăng
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Actions */}
               <div className="px-4 py-3 flex flex-col gap-1">

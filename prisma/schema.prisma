@@ -34,6 +34,11 @@ enum DeviceCondition {
   POOR       // Kém (<70%)
 }
 
+enum ConversationType {
+  LISTING    // Chat liên quan tin đăng (buyer ↔ seller)
+  SUPPORT    // Chat hỗ trợ (user ↔ admin), không có listing
+}
+
 // ==================== MODELS ====================
 
 model User {
@@ -146,21 +151,23 @@ model ListingImage {
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  listingId String
-  listing   Listing   @relation(fields: [listingId], references: [id])
-  buyerId   String
-  buyer     User      @relation("BuyerConversations", fields: [buyerId], references: [id])
-  sellerId  String
-  seller    User      @relation("SellerConversations", fields: [sellerId], references: [id])
+  id        String           @id @default(cuid())
+  type      ConversationType @default(LISTING)
+  listingId String?          // NULL khi type=SUPPORT
+  listing   Listing?         @relation(fields: [listingId], references: [id])
+  buyerId   String           // type=SUPPORT: user yêu cầu hỗ trợ
+  buyer     User             @relation("BuyerConversations", fields: [buyerId], references: [id])
+  sellerId  String           // type=SUPPORT: admin xử lý
+  seller    User             @relation("SellerConversations", fields: [sellerId], references: [id])
 
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  @@unique([listingId, buyerId]) // Mỗi buyer chỉ có 1 cuộc trò chuyện với seller cho mỗi listing
+  @@unique([listingId, buyerId]) // Áp dụng cho LISTING (Postgres treats NULLs as distinct → SUPPORT không bị ràng buộc)
   @@index([buyerId])
   @@index([sellerId])
+  @@index([type])
 }
 
 model Message {

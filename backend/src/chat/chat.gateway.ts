@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ConversationsService } from './conversations.service';
+import { PresenceService } from '../presence/presence.service';
 
 interface AuthSocket extends Socket {
   userId: string;
@@ -28,6 +29,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly conversationsService: ConversationsService,
+    private readonly presence: PresenceService,
   ) {}
 
   async handleConnection(client: AuthSocket) {
@@ -47,13 +49,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       client.userId = payload.sub;
       client.join(`user:${payload.sub}`);
+      this.presence.add(payload.sub);
     } catch {
       client.disconnect();
     }
   }
 
-  handleDisconnect(_client: AuthSocket) {
-    // Cleanup handled by socket.io automatically
+  handleDisconnect(client: AuthSocket) {
+    if (client.userId) this.presence.remove(client.userId);
   }
 
   @SubscribeMessage('join_conversation')

@@ -38,6 +38,12 @@ export class UsersController {
     return this.usersService.updateProfile(user.sub, dto);
   }
 
+  @Get('admins')
+  @ApiOperation({ summary: 'Danh sách admin (cho chức năng Hỗ trợ) kèm trạng thái online' })
+  listAdmins(@CurrentUser() user: JwtPayload) {
+    return this.usersService.findAdmins(user.sub);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Xem profile công khai của người dùng' })
   findOne(@Param('id') id: string) {

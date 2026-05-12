@@ -4,12 +4,12 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/axios';
+import { HelpDropdown } from './HelpDropdown';
 
 const PRIMARY_NAV: { href: string; label: string; match: (p: string) => boolean; isNew?: boolean }[] = [
   { href: '/',                   label: 'Trang chủ',   match: (p) => p === '/' },
   { href: '/listings',           label: 'Tin đăng',    match: (p) => p.startsWith('/listings') },
   { href: '/pricing',            label: 'Định giá AI', match: (p) => p.startsWith('/pricing'), isNew: true },
-  { href: '/help',               label: 'Hỗ trợ',      match: (p) => p.startsWith('/help') },
 ];
 
 export function Header() {
@@ -87,6 +87,7 @@ export function Header() {
               </Link>
             );
           })}
+          <HelpDropdown />
         </nav>
 
         <div className="relative w-72 xl:w-80 hidden md:block">

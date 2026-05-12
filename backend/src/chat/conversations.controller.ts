@@ -17,6 +17,7 @@ import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decor
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { CreateSupportConversationDto } from './dto/create-support-conversation.dto';
 
 const chatStorage = diskStorage({
   destination: './uploads',
@@ -37,6 +38,12 @@ export class ConversationsController {
   @ApiOperation({ summary: 'Tạo hoặc lấy cuộc trò chuyện theo listing' })
   create(@Body() dto: CreateConversationDto, @CurrentUser() user: JwtPayload) {
     return this.conversationsService.create(dto.listingId, user.sub);
+  }
+
+  @Post('support')
+  @ApiOperation({ summary: 'Tạo hoặc lấy cuộc trò chuyện hỗ trợ với admin' })
+  createSupport(@Body() dto: CreateSupportConversationDto, @CurrentUser() user: JwtPayload) {
+    return this.conversationsService.createOrGetSupport(user.sub, dto.adminId);
   }
 
   @Get()
