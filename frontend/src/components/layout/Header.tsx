@@ -1,9 +1,16 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/axios';
+
+const PRIMARY_NAV: { href: string; label: string; match: (p: string) => boolean; isNew?: boolean }[] = [
+  { href: '/',                   label: 'Trang chủ',   match: (p) => p === '/' },
+  { href: '/listings',           label: 'Tin đăng',    match: (p) => p.startsWith('/listings') },
+  { href: '/pricing',            label: 'Định giá AI', match: (p) => p.startsWith('/pricing'), isNew: true },
+  { href: '/help',               label: 'Hỗ trợ',      match: (p) => p.startsWith('/help') },
+];
 
 export function Header() {
   const { user, logout, isAuthenticated } = useAuthStore();
@@ -22,13 +29,23 @@ export function Header() {
       .catch(() => {});
   }, [mounted, isAuthenticated]);
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // Đồng bộ ô input với ?search= trên URL khi ở trang /listings, clear khi rời trang
+  useEffect(() => {
+    if (pathname.startsWith('/listings')) {
+      setSearch(searchParams.get('search') ?? '');
+    } else {
+      setSearch('');
+    }
+  }, [pathname, searchParams]);
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && search.trim()) {
       router.push(`/listings?search=${encodeURIComponent(search.trim())}`);
-      setSearch('');
     }
   };
 
@@ -41,15 +58,40 @@ export function Header() {
 
   return (
     <nav className="fixed top-0 w-full z-50 px-8 py-4 glass-nav border-b border-purple-100 flex items-center justify-between">
-      {/* Left: Logo + Search */}
-      <div className="flex items-center gap-12">
+      {/* Left: Logo + Nav + Search */}
+      <div className="flex items-center gap-6">
         <Link href="/" className="text-3xl font-extrabold tracking-tighter text-black font-headline">
           Phone<span className="text-primary">Market</span>
         </Link>
 
-        <div className="relative w-96 hidden md:block">
+        {/* Inline pill nav */}
+        <nav className="hidden lg:flex items-center gap-1 bg-purple-50/60 border border-purple-100 rounded-full p-1">
+          {PRIMARY_NAV.map((item) => {
+            const active = item.match(pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`relative inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold transition-colors ${
+                  active
+                    ? 'bg-white text-primary shadow-sm'
+                    : 'text-slate-600 hover:text-primary'
+                }`}
+              >
+                {item.label}
+                {item.isNew && (
+                  <span className="text-[9px] font-black uppercase tracking-widest bg-primary text-white px-1.5 py-0.5 rounded">
+                    NEW
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="relative w-72 xl:w-80 hidden md:block">
           <input
-            className="w-full bg-slate-100 border-none rounded-full pl-12 pr-6 py-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+            className="w-full bg-slate-100 border-none rounded-full pl-11 pr-6 py-2.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
             placeholder="Tìm kiếm điện thoại..."
             type="text"
             value={search}
@@ -90,15 +132,25 @@ export function Header() {
             <div className="relative">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm cursor-pointer focus:outline-none"
+                aria-haspopup="menu"
+                aria-expanded={showDropdown}
+                className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full border border-purple-100 bg-white hover:bg-purple-50 hover:border-primary/30 shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
-                {user?.avatar ? (
-                  <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-primary flex items-center justify-center text-white font-bold text-sm">
-                    {user?.name?.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <div className="w-8 h-8 rounded-full overflow-hidden">
+                  {user?.avatar ? (
+                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-primary flex items-center justify-center text-white font-bold text-sm">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <span
+                  className={`material-symbols-outlined text-base text-slate-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`}
+                  style={{ fontVariationSettings: "'wght' 600" }}
+                >
+                  expand_more
+                </span>
               </button>
 
               {showDropdown && (

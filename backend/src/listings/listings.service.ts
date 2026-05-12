@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateListingDto } from './dto/create-listing.dto';
@@ -14,10 +15,37 @@ export class ListingsService {
   constructor(private prisma: PrismaService) {}
 
   async create(sellerId: string, dto: CreateListingDto, files: Express.Multer.File[]) {
+    // Bắt buộc 4–6 ảnh khi tạo tin
+    if (!files || files.length < 4) {
+      throw new BadRequestException('Cần tối thiểu 4 ảnh sản phẩm');
+    }
+    if (files.length > 6) {
+      throw new BadRequestException('Chỉ được tải tối đa 6 ảnh sản phẩm');
+    }
+
+    let aiPriceResultJson: Prisma.InputJsonValue | undefined
+    if (dto.aiPriceResult) {
+      try {
+        aiPriceResultJson = JSON.parse(dto.aiPriceResult) as Prisma.InputJsonValue
+      } catch {
+        // Bỏ qua nếu JSON không parse được — listing vẫn tạo bình thường
+      }
+    }
+
+    // Auto-link categoryId từ brand nếu DTO không gửi (form FE chưa pass categoryId)
+    let categoryId = dto.categoryId;
+    if (!categoryId && dto.brand) {
+      const matched = await this.prisma.category.findFirst({
+        where: { parentId: null, name: { equals: dto.brand, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (matched) categoryId = matched.id;
+    }
+
     const listing = await this.prisma.listing.create({
       data: {
         sellerId,
-        ...(dto.categoryId && { categoryId: dto.categoryId }),
+        ...(categoryId && { categoryId }),
         title: dto.title,
         description: dto.description,
         condition: dto.condition,
@@ -31,6 +59,7 @@ export class ListingsService {
         iphoneVersion: dto.iphoneVersion,
         location: dto.location,
         accessories: dto.accessories,
+        ...(aiPriceResultJson !== undefined && { aiPriceResult: aiPriceResultJson }),
         images: {
           create: files.map((file, index) => ({
             url: `/uploads/${file.filename}`,

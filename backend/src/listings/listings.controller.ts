@@ -64,7 +64,7 @@ export class ListingsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tạo tin đăng mới (DRAFT)' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('images', 10, { storage: multerStorage }))
+  @UseInterceptors(FilesInterceptor('images', 6, { storage: multerStorage }))
   create(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateListingDto,

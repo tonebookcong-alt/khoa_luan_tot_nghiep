@@ -1,0 +1,9 @@
+path: C:/khoa_luan_tot_nghiep/ai-service-vision/data/yolo_dataset_damage_cropped
+train: train/images
+val: valid/images
+test: test/images
+nc: 3
+names:
+- physical_damage
+- scratch
+- screen_defect

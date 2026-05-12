@@ -24,14 +24,29 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Internal server error';
 
+    // Trải phẳng response: giữ nguyên object payload (vd ConflictException trả {conversationId})
+    // nhưng đảm bảo `message` luôn là string/string[] để frontend render được
+    const isObj = typeof message === 'object' && message !== null;
+    const extra: Record<string, unknown> = isObj ? { ...(message as object) } : {};
+    let messageField: string | string[];
+    if (typeof message === 'string') {
+      messageField = message;
+    } else if (isObj && 'message' in (message as object)) {
+      const m = (message as { message: unknown }).message;
+      messageField = typeof m === 'string' || Array.isArray(m) ? (m as string | string[]) : JSON.stringify(m);
+      delete extra.message;
+    } else {
+      // Object không có field `message` (vd: { conversationId: 'xxx' })
+      // → fallback message generic, vẫn giữ payload trong các field gốc
+      messageField = `HTTP ${status}`;
+    }
+
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message:
-        typeof message === 'object' && 'message' in (message as object)
-          ? (message as { message: string }).message
-          : message,
+      ...extra,
+      message: messageField,
     });
   }
 }

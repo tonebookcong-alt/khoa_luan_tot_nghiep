@@ -70,8 +70,20 @@ api.interceptors.response.use(
       return api(original);
     } catch (err) {
       processQueue(err, null);
-      localStorage.clear();
-      window.location.href = '/login';
+      // Refresh failed — soft logout: chỉ xóa token + state auth, KHÔNG redirect.
+      // Trang public (home, listings, pricing, listing detail) phải tiếp tục render như guest.
+      // Nếu đang ở route được bảo vệ, middleware Next.js sẽ tự đẩy về /login khi cookie hết.
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        document.cookie = 'accessToken=; path=/; max-age=0';
+        // Reset zustand auth store (nếu đã load) để Header re-render thành guest
+        try {
+          // Dynamic import để tránh circular: store import api → api import store
+          const { useAuthStore } = await import('@/store/auth.store');
+          useAuthStore.getState().logout();
+        } catch { /* ignore */ }
+      }
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

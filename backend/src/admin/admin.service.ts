@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ListingStatus, TransactionStatus } from '@prisma/client';
+import { ListingStatus } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -9,35 +9,60 @@ export class AdminService {
   // ── KPI tổng quan ──────────────────────────────────────────────────
 
   async getStats() {
-    const [totalUsers, totalListings, totalTransactions, commissionAgg] =
-      await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.listing.count(),
-        this.prisma.transaction.count(),
-        this.prisma.transaction.aggregate({
-          where: { status: TransactionStatus.COMPLETED },
-          _sum: { commission: true, amount: true },
-        }),
-      ]);
-
-    const [listingsByStatus, transactionsByStatus] = await Promise.all([
+    const [totalUsers, totalListings, listingsByStatus] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.listing.count(),
       this.prisma.listing.groupBy({ by: ['status'], _count: true }),
-      this.prisma.transaction.groupBy({ by: ['status'], _count: true }),
     ]);
 
     return {
       totalUsers,
       totalListings,
-      totalTransactions,
-      totalRevenue: commissionAgg._sum.amount ?? 0,
-      totalCommission: commissionAgg._sum.commission ?? 0,
       listingsByStatus: Object.fromEntries(
         listingsByStatus.map((r) => [r.status, r._count]),
       ),
-      transactionsByStatus: Object.fromEntries(
-        transactionsByStatus.map((r) => [r.status, r._count]),
-      ),
     };
+  }
+
+  // ── Tin đăng & user mới theo ngày (7 ngày gần nhất) ────────────────
+
+  async getDailyStats(days = 7) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (days - 1));
+
+    const [listings, users] = await Promise.all([
+      this.prisma.listing.findMany({
+        where: { createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+      this.prisma.user.findMany({
+        where: { createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const buckets: Record<string, { listings: number; users: number }> = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      buckets[key] = { listings: 0, users: 0 };
+    }
+    for (const r of listings) {
+      const k = r.createdAt.toISOString().slice(0, 10);
+      if (buckets[k]) buckets[k].listings++;
+    }
+    for (const r of users) {
+      const k = r.createdAt.toISOString().slice(0, 10);
+      if (buckets[k]) buckets[k].users++;
+    }
+
+    return Object.entries(buckets).map(([date, v]) => ({
+      date,
+      listings: v.listings,
+      users: v.users,
+    }));
   }
 
   // ── Biến động giá theo model ────────────────────────────────────────
@@ -59,31 +84,6 @@ export class AdminService {
         recordedAt: true,
       },
     });
-  }
-
-  // ── Doanh thu hoa hồng theo tháng ──────────────────────────────────
-
-  async getCommissionByMonth() {
-    // Raw query để group by tháng
-    const rows = await this.prisma.$queryRaw<
-      { month: string; commission: number; count: bigint }[]
-    >`
-      SELECT
-        TO_CHAR("createdAt", 'YYYY-MM') AS month,
-        SUM(commission)::int            AS commission,
-        COUNT(*)                        AS count
-      FROM "Transaction"
-      WHERE status = 'COMPLETED'
-      GROUP BY month
-      ORDER BY month ASC
-      LIMIT 12
-    `;
-
-    return rows.map((r) => ({
-      month: r.month,
-      commission: r.commission,
-      count: Number(r.count),
-    }));
   }
 
   // ── Listings management ─────────────────────────────────────────────
@@ -123,33 +123,5 @@ export class AdminService {
       data: { status },
       select: { id: true, status: true, title: true },
     });
-  }
-
-  // ── Transactions management ─────────────────────────────────────────
-
-  async getTransactions(page = 1, limit = 20, status?: TransactionStatus) {
-    const skip = (page - 1) * limit;
-    const where = status ? { status } : {};
-    const [data, total] = await Promise.all([
-      this.prisma.transaction.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          amount: true,
-          commission: true,
-          status: true,
-          vnpayRef: true,
-          createdAt: true,
-          listing: { select: { id: true, title: true } },
-          buyer: { select: { id: true, name: true } },
-          seller: { select: { id: true, name: true } },
-        },
-      }),
-      this.prisma.transaction.count({ where }),
-    ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 }

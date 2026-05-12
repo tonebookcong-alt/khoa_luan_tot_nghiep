@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AiPricingResult } from '@/components/listings/AiPricingResult';
+import { PhotoGuide } from '@/components/listings/PhotoGuide';
+import { BRANDS, PHONE_MODELS } from '@/lib/phone-models';
 import { Listing, Category } from '@/types/api.types';
 
 const schema = z.object({
@@ -25,6 +27,7 @@ const schema = z.object({
   origin: z.string().optional(),
   warranty: z.string().optional(),
   iphoneVersion: z.string().optional(),
+  batteryHealth: z.number().min(0, 'Pin từ 0-100%').max(100, 'Pin từ 0-100%').optional().or(z.nan().transform(() => undefined)),
   location: z.string().optional(),
   accessories: z.string().optional(),
 });
@@ -53,13 +56,9 @@ const CONDITIONS = [
   { value: 'POOR', label: 'Kém (<70%)' },
 ] as const;
 
-const BRANDS = [
-  'Apple', 'Samsung', 'Xiaomi', 'OPPO', 'Vivo', 'Huawei', 'Realme', 'OnePlus',
-  'Motorola', 'Sony', 'Nokia', 'Google', 'Honor', 'Nothing', 'RedMagic',
-  'LG', 'ASUS', 'BKAV', 'Khác',
-];
+// BRANDS + PHONE_MODELS dùng chung từ @/lib/phone-models
 
-const PHONE_MODELS: Record<string, string[]> = {
+const _LEGACY_PHONE_MODELS_UNUSED: Record<string, string[]> = {
   Apple: [
     // SE
     'iPhone SE (Thế hệ 1)', 'iPhone SE (Thế hệ 2)', 'iPhone SE (Thế hệ 3)',
@@ -570,10 +569,14 @@ const ORIGIN_OPTIONS = ['Việt Nam', 'Ấn Độ', 'Hàn Quốc', 'Thái Lan', 
 
 const WARRANTY_OPTIONS = ['Hết bảo hành', '1 tháng', '2 tháng', '3 tháng', '4-6 tháng', '7-12 tháng', '>12 tháng', 'Còn bảo hành'];
 
+const MIN_IMAGES = 4;
+const MAX_IMAGES = 6;
+
 export default function CreateListingPage() {
   const router = useRouter();
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [imageError, setImageError] = useState('');
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [aiResult, setAiResult] = useState<AiPricingData | null>(null);
@@ -635,9 +638,18 @@ export default function CreateListingPage() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    const newImages = [...images, ...files].slice(0, 10);
+    const wouldExceed = images.length + files.length > MAX_IMAGES;
+    const newImages = [...images, ...files].slice(0, MAX_IMAGES);
     setImages(newImages);
     setPreviews(newImages.map((f) => URL.createObjectURL(f)));
+    // Reset input value để có thể chọn lại cùng file
+    e.target.value = '';
+    // Clear/cập nhật message
+    if (wouldExceed) {
+      setImageError(`Chỉ được tải tối đa ${MAX_IMAGES} ảnh — các ảnh dư đã bị bỏ.`);
+    } else if (newImages.length >= MIN_IMAGES) {
+      setImageError('');
+    }
     // Reset AI result khi ảnh thay đổi
     setAiResult(null);
     setAiError('');
@@ -647,6 +659,9 @@ export default function CreateListingPage() {
     const newImages = images.filter((_, i) => i !== index);
     setImages(newImages);
     setPreviews(newImages.map((f) => URL.createObjectURL(f)));
+    if (newImages.length === 0) setImageError('Vui lòng tải lên ít nhất 4 ảnh.');
+    else if (newImages.length < MIN_IMAGES) setImageError(`Cần tối thiểu ${MIN_IMAGES} ảnh (hiện ${newImages.length}).`);
+    else setImageError('');
     setAiResult(null);
   };
 
@@ -668,12 +683,21 @@ export default function CreateListingPage() {
       const formData = new FormData();
       formData.append('brand', watchedBrand);
       formData.append('model', watchedModel);
+      const batteryValue = watch('batteryHealth');
+      if (batteryValue != null && Number.isFinite(batteryValue)) {
+        formData.append('batteryHealth', String(batteryValue));
+      }
       images.forEach((img) => formData.append('images', img));
 
       const res = await api.post<AiPricingData>('/pricing/estimate', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setAiResult(res.data);
+      // Auto-set tình trạng máy từ AI overallCondition (nếu hợp lệ)
+      const aiCondition = res.data.overallCondition as 'LIKE_NEW' | 'GOOD' | 'FAIR' | 'POOR' | undefined;
+      if (aiCondition && ['LIKE_NEW', 'GOOD', 'FAIR', 'POOR'].includes(aiCondition)) {
+        setValue('condition', aiCondition, { shouldValidate: true });
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       const status = axiosErr?.response?.status;
@@ -699,12 +723,35 @@ export default function CreateListingPage() {
 
   const onSubmit = async (data: FormData) => {
     setError('');
+    // Validate ảnh trước khi submit
+    if (images.length === 0) {
+      setImageError('Vui lòng tải lên ít nhất 4 ảnh sản phẩm.');
+      document.getElementById('image-upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (images.length < MIN_IMAGES) {
+      setImageError(`Cần tối thiểu ${MIN_IMAGES} ảnh (hiện ${images.length}).`);
+      document.getElementById('image-upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (images.length > MAX_IMAGES) {
+      setImageError(`Chỉ được tải tối đa ${MAX_IMAGES} ảnh.`);
+      return;
+    }
     try {
       const formData = new FormData();
+      // batteryHealth chỉ dùng cho /pricing/estimate, không phải field của Listing
+      // → loại ra để tránh ValidationPipe forbidNonWhitelisted reject
+      const FORM_ONLY_FIELDS = new Set(['batteryHealth']);
       Object.entries(data).forEach(([k, v]) => {
+        if (FORM_ONLY_FIELDS.has(k)) return;
         if (v !== undefined && v !== '') formData.append(k, String(v));
       });
       images.forEach((img) => formData.append('images', img));
+      // Đính kèm kết quả AI (JSON) để backend lưu vào listing.aiPriceResult
+      if (aiResult) {
+        formData.append('aiPriceResult', JSON.stringify(aiResult));
+      }
 
       const res = await api.post<Listing>('/listings', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -719,16 +766,34 @@ export default function CreateListingPage() {
     }
   };
 
+  // Layout: form ở giữa khi chưa có AI; chia 2 cột (form trái, AI phải sticky) khi đã có AI
+  const containerClass = aiResult
+    ? 'mx-auto max-w-6xl px-4 py-8'
+    : 'mx-auto max-w-2xl px-4 py-8'
+  const gridClass = aiResult
+    ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] items-start'
+    : ''
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className={containerClass}>
       <h1 className="mb-6 text-2xl font-extrabold text-slate-900 font-headline">Đăng tin bán máy</h1>
 
+      <div className={gridClass}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Images */}
-        <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 font-semibold text-gray-900">
-            Ảnh sản phẩm <span className="text-gray-400 font-normal text-sm">(tối đa 10 ảnh)</span>
-          </h2>
+        <div id="image-upload-section" className="rounded-3xl border border-purple-100 bg-white p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="font-semibold text-gray-900">
+              Ảnh sản phẩm <span className="text-red-500">*</span>{' '}
+              <span className="text-gray-400 font-normal text-sm">(yêu cầu {MIN_IMAGES}–{MAX_IMAGES} ảnh)</span>
+            </h2>
+            <span className={`text-sm font-medium ${
+              images.length >= MIN_IMAGES && images.length <= MAX_IMAGES ? 'text-emerald-600' : 'text-amber-600'
+            }`}>
+              Đã chọn: {images.length}/{MAX_IMAGES}
+            </span>
+          </div>
+          <PhotoGuide />
           <div className="flex flex-wrap gap-3">
             {previews.map((src, i) => (
               <div key={i} className="relative h-24 w-24">
@@ -742,7 +807,7 @@ export default function CreateListingPage() {
                 </button>
               </div>
             ))}
-            {images.length < 10 && (
+            {images.length < MAX_IMAGES && (
               <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-purple-200 text-slate-400 hover:border-primary hover:text-primary transition-colors">
                 <Upload className="h-6 w-6" />
                 <span className="mt-1 text-xs">Thêm ảnh</span>
@@ -750,6 +815,11 @@ export default function CreateListingPage() {
               </label>
             )}
           </div>
+          {imageError && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {imageError}
+            </p>
+          )}
         </div>
 
         {/* Basic info */}
@@ -823,17 +893,47 @@ export default function CreateListingPage() {
           </div>
 
           {watchedBrand === 'Apple' && (
-            <div>
-              <Label>Phiên bản</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {['Quốc tế', 'Khoá mạng (lock)'].map((v) => (
-                  <label key={v} className="flex cursor-pointer items-center gap-2">
-                    <input type="radio" value={v} {...register('iphoneVersion')} className="sr-only peer" />
-                    <span className="rounded-full border border-purple-100 px-4 py-1.5 text-xs font-bold cursor-pointer peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white hover:border-primary/40 transition-colors">
-                      {v}
-                    </span>
-                  </label>
-                ))}
+            <div className="space-y-4">
+              <div>
+                <Label>Phiên bản</Label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {['Quốc tế', 'Khoá mạng (lock)'].map((v) => (
+                    <label key={v} className="flex cursor-pointer items-center gap-2">
+                      <input type="radio" value={v} {...register('iphoneVersion')} className="sr-only peer" />
+                      <span className="rounded-full border border-purple-100 px-4 py-1.5 text-xs font-bold cursor-pointer peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white hover:border-primary/40 transition-colors">
+                        {v}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="batteryHealth">
+                  Pin còn (%)
+                  <span className="ml-1 text-xs font-normal text-slate-400">
+                    — xem trong Cài đặt → Pin → Tình trạng pin
+                  </span>
+                </Label>
+                <div className="mt-1 flex items-center gap-3">
+                  <input
+                    id="batteryHealth"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    placeholder="VD: 85"
+                    className="h-10 w-32 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:border-primary focus:outline-none"
+                    {...register('batteryHealth', { valueAsNumber: true })}
+                  />
+                  <span className="text-sm text-slate-500">%</span>
+                  <span className="text-xs text-slate-400 hidden sm:inline">
+                    AI sẽ trừ giá theo % pin chai (Apple coi 80% là ngưỡng nên thay)
+                  </span>
+                </div>
+                {errors.batteryHealth && (
+                  <p className="mt-1 text-xs text-red-600">{errors.batteryHealth.message}</p>
+                )}
               </div>
             </div>
           )}
@@ -909,19 +1009,9 @@ export default function CreateListingPage() {
             )}
           </div>
 
-          <div>
-            <Label>Tình trạng máy</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {CONDITIONS.map((c) => (
-                <label key={c.value} className="flex cursor-pointer items-center gap-2">
-                  <input type="radio" value={c.value} {...register('condition')} className="sr-only peer" />
-                  <span className="rounded-full border border-purple-100 px-3 py-1.5 text-xs font-bold cursor-pointer peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white hover:border-primary/40 transition-colors">
-                    {c.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {/* "Tình trạng máy" được tự động set từ AI overallCondition sau khi định giá.
+              Hidden field giữ giá trị mặc định 'GOOD' nếu user không chạy AI. */}
+          <input type="hidden" {...register('condition')} />
 
           {/* AI Pricing Section */}
           <div className="border-t border-dashed border-purple-100 pt-4 space-y-3">
@@ -974,11 +1064,6 @@ export default function CreateListingPage() {
           </div>
         </div>
 
-        {/* AI Pricing Result */}
-        {aiResult && (
-          <AiPricingResult data={aiResult} onUsePrice={handleUseAiPrice} />
-        )}
-
         {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
         <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
@@ -986,6 +1071,14 @@ export default function CreateListingPage() {
           Đăng tin ngay
         </Button>
       </form>
+
+      {/* Right column: AI Pricing Result (sticky để cuộn theo) */}
+      {aiResult && (
+        <aside className="lg:sticky lg:top-24">
+          <AiPricingResult data={aiResult} imageUrls={previews} onUsePrice={handleUseAiPrice} />
+        </aside>
+      )}
+      </div>
 
       {/* Address Modal */}
       {showAddressModal && (

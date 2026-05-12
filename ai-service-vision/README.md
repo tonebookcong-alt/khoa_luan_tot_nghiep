@@ -226,11 +226,23 @@ Zip thư mục này → upload lên Roboflow → Stage 3 (manual labeling).
 
 ---
 
-## Train (Colab)
+## Train
 
-Notebook: `notebooks/02_train_yolov11s.ipynb` (TODO Stage 4).
+### Generation Model (9 classes)
 
-Sau khi train xong, download `runs/train/iphone_v1/weights/best.pt` về `app/models/best.pt`.
+Notebook: `notebooks/02_train_yolov11s.ipynb` — Train YOLOv11s trên Google Colab T4.
+- Dataset: 12-class merged (9 generation + 3 damage), ~11k images
+- Output: `best.pt` → `app/models/best.pt`
+- Mục tiêu: mAP@50 ≥ 0.70 overall
+
+### Damage Model (3 classes) — Optional
+
+Notebook: `notebooks/03_train_damage_model_kaggle.ipynb` — Train YOLOv11m trên Kaggle T4 x2.
+- Dataset: Cropped images (`yolo_dataset_damage_cropped/`), ~1900 images, imgsz=1280
+- Classes: `physical_damage`, `scratch`, `screen_defect`
+- Output: `best_damage.pt` → `app/models/best_damage.pt`
+- Mục tiêu: mAP@50 ≥ 0.55 (small object detection harder)
+- Hoạt động: `/v1/detect` tự detect damage riêng nếu model có, fallback to generation model
 
 ---
 
@@ -250,3 +262,32 @@ docker run -p 8000:8000 -v $(pwd)/app/models:/app/app/models:ro ai-service-visio
 ```
 
 Hoặc qua `docker/docker-compose.yml` (đã thêm service).
+
+---
+
+## Lộ trình Damage Model Training (nếu cần)
+
+1. **Chuẩn bị dữ liệu:** 
+   - Cropped dataset sẵn tại `data/yolo_dataset_damage_cropped/` (do `scripts/crop_damage_dataset.py`)
+   - Zip: `data/yolo_dataset_damage_cropped.zip` (sẵn upload)
+
+2. **Training trên Kaggle:**
+   - Notebook: `notebooks/03_train_damage_model_kaggle.ipynb`
+   - GPU: T4 x2 (bắt buộc, nếu T4 x1 thì batch=4)
+   - Hyperparams: imgsz=1280, batch=8, epochs=150, patience=30
+   - Thời gian: ~2.5h trên T4 x2
+
+3. **Download + Deploy:**
+   - Save `best_damage.pt` từ Kaggle output → `app/models/best_damage.pt`
+   - DamageService tự load + inject vào `/v1/detect` endpoint
+   - Health check: `GET /health` sẽ show `damage_model_loaded: true/false`
+
+4. **Validation:**
+   ```bash
+   curl -X GET http://localhost:8000/health
+   # {
+   #   "status": "healthy",
+   #   "generation_model_loaded": true,
+   #   "damage_model_loaded": true  ← phải true nếu best_damage.pt có
+   # }
+   ```

@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common'
-import { DamageItem } from './vision.service'
-import { DamageBreakdownItem, EstimateResponseDto, PriceRange } from './dto/estimate.dto'
+import { DamageDetection, DamageItem, ImageMeta } from './vision.service'
+import {
+  DamageBreakdownItem,
+  DamageDetectionDto,
+  EstimateResponseDto,
+  ImageMetaDto,
+  MarketSampleDto,
+  PriceRange,
+} from './dto/estimate.dto'
 
 @Injectable()
 export class PricingCalculatorService {
@@ -24,6 +31,23 @@ export class PricingCalculatorService {
     summary: string,
     marketSummary: string,
     dataPoints: number,
+    extras: {
+      detectedGeneration: string | null
+      claimedModel: string
+      claimedMatches: boolean
+      damageDetections: DamageDetection[]
+      images: ImageMeta[]
+      marketSamples?: MarketSampleDto[]
+      dataSource?: EstimateResponseDto['dataSource']
+    } = {
+      detectedGeneration: null,
+      claimedModel: detectedModel,
+      claimedMatches: true,
+      damageDetections: [],
+      images: [],
+      marketSamples: [],
+      dataSource: 'unavailable',
+    },
   ): EstimateResponseDto {
     const damageBreakdown: DamageBreakdownItem[] = damages.map((d) => ({
       part: d.part,
@@ -47,6 +71,25 @@ export class PricingCalculatorService {
         }
       : priceRange
 
+    const damageDetectionsDto: DamageDetectionDto[] = extras.damageDetections.map((d) => ({
+      label: d.label,
+      labelDisplay: d.labelDisplay,
+      confidence: d.confidence,
+      imageIndex: d.imageIndex,
+      bbox: d.bbox,
+      imageWidth: d.imageWidth,
+      imageHeight: d.imageHeight,
+      areaRatio: d.areaRatio,
+      location: d.location,
+    }))
+
+    const imagesDto: ImageMetaDto[] = extras.images.map((img) => ({
+      index: img.index,
+      width: img.width,
+      height: img.height,
+      detectionCount: img.detectionCount,
+    }))
+
     return {
       pMarket,
       pFinal,
@@ -58,6 +101,13 @@ export class PricingCalculatorService {
       summary,
       marketSummary,
       dataPoints,
+      detectedGeneration: extras.detectedGeneration,
+      claimedModel: extras.claimedModel,
+      claimedMatches: extras.claimedMatches,
+      damageDetections: damageDetectionsDto,
+      images: imagesDto,
+      marketSamples: extras.marketSamples ?? [],
+      dataSource: extras.dataSource ?? 'unavailable',
     }
   }
 }

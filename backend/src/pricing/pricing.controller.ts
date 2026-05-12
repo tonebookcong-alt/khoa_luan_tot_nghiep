@@ -49,10 +49,13 @@ export class PricingController {
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     const safeFiles = files ?? []
-    this.logger.log(`estimate called: brand=${dto.brand} model=${dto.model} files=${safeFiles.length}`)
+    const batteryHealth = dto.batteryHealth
+    this.logger.log(
+      `estimate called: brand=${dto.brand} model=${dto.model} files=${safeFiles.length} battery=${batteryHealth ?? 'n/a'}`,
+    )
     // Chạy song song: phân tích ảnh + lấy giá thị trường
     const [visionResult, marketResult] = await Promise.all([
-      this.visionService.analyzeImages(safeFiles, dto.model, dto.brand, dto.listingId),
+      this.visionService.analyzeImages(safeFiles, dto.model, dto.brand, dto.listingId, batteryHealth),
       this.marketService.getMarketPrice(dto.brand, dto.model),
     ])
 
@@ -66,6 +69,15 @@ export class PricingController {
       visionResult.summary,
       marketResult.marketSummary,
       marketResult.dataPoints,
+      {
+        detectedGeneration: visionResult.detectedGeneration,
+        claimedModel: visionResult.claimedModel,
+        claimedMatches: visionResult.claimedMatches,
+        damageDetections: visionResult.damageDetections,
+        images: visionResult.images,
+        marketSamples: marketResult.marketSamples,
+        dataSource: marketResult.dataSource,
+      },
     )
 
     // Nếu có listingId, lưu aiPriceResult vào listing (non-blocking)

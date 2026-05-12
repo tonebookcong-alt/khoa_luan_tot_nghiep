@@ -8,12 +8,13 @@ import { CategoriesModule } from './categories/categories.module';
 import { ListingsModule } from './listings/listings.module';
 import { PricingModule } from './pricing/pricing.module';
 import { ChatModule } from './chat/chat.module';
-import { PaymentModule } from './payment/payment.module';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // envFilePath theo thứ tự ưu tiên: root .env > backend/.env (legacy fallback).
+    // Đặt root .env trước để khớp với Prisma (cũng đọc từ root) → tránh xung đột.
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../.env', '.env'] }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     PrismaModule,
     AuthModule,
@@ -22,7 +23,6 @@ import { AdminModule } from './admin/admin.module';
     ListingsModule,
     PricingModule,
     ChatModule,
-    PaymentModule,
     AdminModule,
   ],
 })

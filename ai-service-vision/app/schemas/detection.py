@@ -54,3 +54,4 @@ class DetectionResponse(BaseModel):
     damage_scores: DamageScores
     overall_confidence: float = Field(ge=0.0, le=1.0)
     per_image: list[ImageDetections]
+    damage_per_image: list[ImageDetections] = Field(default_factory=list)

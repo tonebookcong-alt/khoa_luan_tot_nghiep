@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
-import { User } from '@prisma/client';
+import { User, Prisma, Role } from '@prisma/client';
 
 type UserWithoutPassword = Omit<User, 'passwordHash'>;
 
@@ -27,10 +27,30 @@ export class UsersService {
   }
 
   // Admin operations
-  async findAll(page: number, limit: number) {
+  async findAll(
+    page: number,
+    limit: number,
+    opts: { search?: string; status?: 'active' | 'banned'; role?: string } = {},
+  ) {
     const skip = (page - 1) * limit;
+    const search = opts.search?.trim();
+    const where: Prisma.UserWhereInput = {
+      ...(search
+        ? {
+            OR: [
+              { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { phone: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            ],
+          }
+        : {}),
+      ...(opts.status === 'banned' ? { isBanned: true } : {}),
+      ...(opts.status === 'active' ? { isBanned: false } : {}),
+      ...(opts.role ? { role: opts.role as Role } : {}),
+    };
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
+        where,
         skip,
         take: limit,
         select: {
@@ -48,9 +68,9 @@ export class UsersService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ]);
-    return { data: users, total, page, limit };
+    return { data: users, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async adminUpdate(id: string, dto: AdminUpdateUserDto): Promise<UserWithoutPassword> {

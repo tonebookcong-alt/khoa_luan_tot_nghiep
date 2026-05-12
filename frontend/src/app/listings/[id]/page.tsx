@@ -1,12 +1,21 @@
 import { notFound } from 'next/navigation';
 import { MapPin, Clock, Info } from 'lucide-react';
 import { api } from '@/lib/axios';
-import { Listing, CONDITION_LABELS, AiPriceResult } from '@/types/api.types';
+import { Listing, CONDITION_LABELS, AiPriceResult, DeviceCondition } from '@/types/api.types';
 import { Badge } from '@/components/ui/badge';
-import { formatPrice, formatDate } from '@/lib/utils';
+
+const CONDITION_VARIANT: Record<DeviceCondition, 'success' | 'default' | 'warning' | 'destructive'> = {
+  NEW: 'success',
+  LIKE_NEW: 'success',
+  GOOD: 'default',
+  FAIR: 'warning',
+  POOR: 'destructive',
+};
+import { formatPrice, formatDate, getImageUrl } from '@/lib/utils';
 import { ListingImageGallery } from '@/components/listings/ListingImageGallery';
 import { ListingContactPanel } from '@/components/listings/ListingContactPanel';
 import { SaveButton } from '@/components/listings/SaveButton';
+import { AiPricingResult } from '@/components/listings/AiPricingResult';
 
 async function getListing(id: string): Promise<Listing | null> {
   try {
@@ -33,8 +42,9 @@ function SpecRow({ label, value }: { label: string; value: string }) {
 }
 
 function MarketPriceRange({ askingPrice, aiResult }: { askingPrice: number; aiResult: AiPriceResult }) {
-  const low  = aiResult.priceRange?.low  ?? aiResult.P_final * 0.85;
-  const high = aiResult.priceRange?.high ?? aiResult.P_final * 1.15;
+  const pFinal = aiResult.pFinal ?? aiResult.P_final ?? askingPrice;
+  const low  = aiResult.priceRange?.low  ?? pFinal * 0.85;
+  const high = aiResult.priceRange?.high ?? pFinal * 1.15;
   const pct  = Math.min(Math.max(((askingPrice - low) / (high - low)) * 100, 2), 98);
 
   return (
@@ -74,10 +84,11 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-24 pb-12">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] items-start">
+      <div className="rounded-3xl border border-purple-100 bg-white/85 backdrop-blur-sm p-6 shadow-sm">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_minmax(0,1fr)] items-start">
 
         {/* ── LEFT: Gallery + Specs ── */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <ListingImageGallery images={listing.images} title={listing.title} />
 
           {/* Specs */}
@@ -94,7 +105,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         </div>
 
         {/* ── RIGHT: Info + Contact ── */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
 
           {/* Title + Save */}
           <div className="flex items-start justify-between gap-3">
@@ -103,9 +114,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 {listing.brand}
                 {listing.category && ` · ${listing.category.name}`}
               </p>
-              <h1 className="text-xl font-bold leading-snug text-gray-900">{listing.title}</h1>
+              <h1 className="text-xl font-bold leading-snug text-gray-900 break-words">{listing.title}</h1>
               <div className="mt-1.5">
-                <Badge variant="success">{CONDITION_LABELS[listing.condition]}</Badge>
+                <Badge variant={CONDITION_VARIANT[listing.condition]}>{CONDITION_LABELS[listing.condition]}</Badge>
               </div>
             </div>
             <SaveButton listingId={listing.id} />
@@ -142,12 +153,52 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {/* Description */}
           <div className="rounded-2xl border border-gray-100 bg-white p-5">
             <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">Mô tả</h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">
+            <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-600">
               {listing.description}
             </p>
           </div>
+
+          {/* Full AI Pricing Analysis (read-only) */}
+          {listing.aiPriceResult && (listing.aiPriceResult.pFinal ?? listing.aiPriceResult.P_final) ? (
+            <AiPricingResult
+              data={normalizeAiResult(listing.aiPriceResult)}
+              imageUrls={listing.images.map((img) => getImageUrl(img.url))}
+              readOnly
+            />
+          ) : null}
         </div>
+      </div>
       </div>
     </div>
   );
+}
+
+/**
+ * Tin đăng cũ có thể lưu schema {P_market, P_final, ...}; tin mới lưu {pMarket, pFinal, ...}.
+ * Chuẩn hoá để AiPricingResult component đọc field camelCase.
+ */
+function normalizeAiResult(r: AiPriceResult): Parameters<typeof AiPricingResult>[0]['data'] {
+  return {
+    pMarket: r.pMarket ?? r.P_market ?? 0,
+    pFinal: r.pFinal ?? r.P_final ?? 0,
+    priceRange: r.priceRange,
+    damageBreakdown: (r.damageBreakdown ?? []).map((d) => ({
+      part: d.part,
+      severity: d.severity,
+      weight: d.weight,
+      description: d.description ?? '',
+      deductionPercent: d.deductionPercent ?? Math.round(d.weight * d.severity * 1000) / 10,
+    })),
+    confidenceScore: r.confidenceScore,
+    detectedModel: r.detectedModel ?? '',
+    overallCondition: r.overallCondition ?? '',
+    summary: r.summary ?? '',
+    marketSummary: r.marketSummary ?? '',
+    dataPoints: r.dataPoints ?? 0,
+    detectedGeneration: r.detectedGeneration,
+    claimedModel: r.claimedModel,
+    claimedMatches: r.claimedMatches,
+    damageDetections: r.damageDetections,
+    images: r.images,
+  };
 }

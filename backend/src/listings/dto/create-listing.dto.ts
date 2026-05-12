@@ -78,4 +78,11 @@ export class CreateListingDto {
   @IsOptional()
   @IsString()
   accessories?: string;
+
+  @ApiPropertyOptional({
+    description: 'JSON-encoded EstimateResponseDto (output từ /pricing/estimate). Multipart không pass nested object nên dùng string.',
+  })
+  @IsOptional()
+  @IsString()
+  aiPriceResult?: string;
 }

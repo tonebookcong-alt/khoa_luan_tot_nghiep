@@ -2,12 +2,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Phone, MessageCircle, Loader2 } from 'lucide-react';
+import { Phone, MessageCircle, Loader2, Pencil, BadgeInfo } from 'lucide-react';
 import { api } from '@/lib/axios';
 import { useAuthStore } from '@/store/auth.store';
 import { Listing } from '@/types/api.types';
 import { getImageUrl, formatDate } from '@/lib/utils';
-import { BuyNowButton } from './BuyNowButton';
 
 const SUGGESTIONS = [
   'Điện thoại này còn không?',
@@ -34,36 +33,68 @@ export function ListingContactPanel({ listing }: Props) {
   const isSelf = mounted && user?.id === listing.seller.id;
   const authed = mounted && isAuthenticated();
 
+  const extractError = (err: unknown): { status?: number; message: string } => {
+    const e = err as { response?: { status?: number; data?: { message?: unknown } }; message?: string };
+    const status = e?.response?.status;
+    const raw = e?.response?.data?.message;
+    let message: string;
+    if (typeof raw === 'string') message = raw;
+    else if (Array.isArray(raw) && typeof raw[0] === 'string') message = raw[0];
+    else if (typeof e?.message === 'string') message = e.message;
+    else message = 'Đã xảy ra lỗi';
+    return { status, message };
+  };
+
   const handleContact = async (msg?: string) => {
     if (!authed) { router.push('/login'); return; }
     setLoading(true);
     setError('');
+    let convId: string | null = null;
+
+    // Bước 1: tạo / lấy conversation
     try {
       const res = await api.post<{ id: string }>('/conversations', { listingId: listing.id });
-      const convId = res.data.id;
-      if (msg?.trim()) {
-        await api.post(`/conversations/${convId}/messages`, { content: msg.trim() });
-      }
-      router.push(`/dashboard/messages?conversationId=${convId}`);
+      convId = res.data.id;
     } catch (err: unknown) {
-      const convId = (err as { response?: { data?: { conversationId?: string } } })
+      const existingId = (err as { response?: { data?: { conversationId?: string } } })
         ?.response?.data?.conversationId;
-      if (convId) {
-        if (msg?.trim()) {
-          try { await api.post(`/conversations/${convId}/messages`, { content: msg.trim() }); } catch { /* ignore */ }
+      if (existingId) {
+        // Conversation đã tồn tại (409) — dùng id cũ
+        convId = existingId;
+      } else {
+        const { status, message } = extractError(err);
+        setLoading(false);
+        if (status === 401) { router.push('/login'); return; }
+        if (status === 400 && message.includes('chính mình')) {
+          setError('Đây là tin của bạn, không thể tự nhắn.');
+        } else if (status === 404) {
+          setError('Tin đăng không còn tồn tại.');
+        } else {
+          setError(message || 'Không tạo được cuộc trò chuyện.');
         }
-        router.push(`/dashboard/messages?conversationId=${convId}`);
         return;
       }
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 401) {
-        router.push('/login');
-      } else {
-        setError('Không thể gửi tin nhắn. Vui lòng thử lại.');
-      }
-    } finally {
-      setLoading(false);
     }
+
+    // Bước 2: gửi tin nhắn (nếu có)
+    if (msg?.trim() && convId) {
+      try {
+        await api.post(`/conversations/${convId}/messages`, { content: msg.trim() });
+      } catch (err: unknown) {
+        const { status, message } = extractError(err);
+        setLoading(false);
+        if (status === 401) { router.push('/login'); return; }
+        if (status === 403) {
+          setError(message.includes('chặn') ? 'Bạn và người bán đã chặn nhau, không thể nhắn tin.' : 'Bạn không có quyền nhắn trong cuộc trò chuyện này.');
+        } else {
+          setError(message || 'Gửi tin nhắn thất bại.');
+        }
+        return;
+      }
+    }
+
+    setLoading(false);
+    router.push(`/dashboard/messages?conversationId=${convId}`);
   };
 
   const handleSuggestion = (s: string) => {
@@ -74,10 +105,28 @@ export function ListingContactPanel({ listing }: Props) {
 
   return (
     <div className="space-y-3">
+      {/* Self-listing banner */}
+      {mounted && isSelf && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-center gap-3">
+          <BadgeInfo className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-amber-900">Đây là tin đăng của bạn</p>
+            <p className="text-xs text-amber-700/80 mt-0.5">Bạn không thể tự nhắn tin cho chính mình.</p>
+          </div>
+          <Link
+            href={`/dashboard/listings`}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 px-3.5 py-2 text-xs font-bold text-white transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Quản lý tin
+          </Link>
+        </div>
+      )}
+
       {/* Phone + Chat buttons */}
       {mounted && !isSelf && (
-        <div className="grid grid-cols-2 gap-3">
-          {listing.seller.phone ? (
+        <div className={`grid gap-3 ${listing.seller.phone ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {listing.seller.phone && (
             <a
               href={`tel:${listing.seller.phone}`}
               className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-700 hover:border-primary hover:text-primary transition-colors"
@@ -85,12 +134,6 @@ export function ListingContactPanel({ listing }: Props) {
               <Phone className="h-4 w-4" />
               {listing.seller.phone}
             </a>
-          ) : (
-            <BuyNowButton
-              listingId={listing.id}
-              sellerId={listing.seller.id}
-              listingStatus={listing.status}
-            />
           )}
           <button
             onClick={() => handleContact()}
@@ -98,15 +141,15 @@ export function ListingContactPanel({ listing }: Props) {
             className="flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-purple-700 py-3 text-sm font-bold text-white transition-colors disabled:opacity-60"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-            Chat
+            Nhắn tin người bán
           </button>
         </div>
       )}
 
       {/* Seller card */}
       <div className="rounded-2xl border border-gray-100 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <Link href={`/users/${listing.seller.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <div className="flex items-center justify-between gap-3">
+          <Link href={`/users/${listing.seller.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
             {listing.seller.avatar ? (
               <img
                 src={getImageUrl(listing.seller.avatar)}
@@ -118,8 +161,8 @@ export function ListingContactPanel({ listing }: Props) {
                 {listing.seller.name[0]?.toUpperCase()}
               </div>
             )}
-            <div>
-              <p className="font-bold text-gray-900">{listing.seller.name}</p>
+            <div className="min-w-0">
+              <p className="font-bold text-gray-900 truncate">{listing.seller.name}</p>
               {listing.seller.createdAt && (
                 <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
@@ -128,12 +171,25 @@ export function ListingContactPanel({ listing }: Props) {
               )}
             </div>
           </Link>
-          <Link
-            href={`/users/${listing.seller.id}`}
-            className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary transition-colors"
-          >
-            Xem trang
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {mounted && !isSelf && (
+              <button
+                onClick={() => handleContact()}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-purple-700 px-3 py-1.5 text-xs font-bold text-white transition-colors disabled:opacity-60"
+                title="Nhắn tin với người bán"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+                Chat
+              </button>
+            )}
+            <Link
+              href={`/users/${listing.seller.id}`}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-primary hover:text-primary transition-colors"
+            >
+              Xem trang
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -189,6 +245,23 @@ export function ListingContactPanel({ listing }: Props) {
             </button>
           )}
         </div>
+      )}
+
+      {/* Sticky floating Chat FAB — luôn hiển thị góc phải dưới khi cuộn trang */}
+      {mounted && !isSelf && (
+        <button
+          onClick={() => handleContact()}
+          disabled={loading}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary hover:bg-purple-700 text-white px-5 py-3.5 shadow-2xl shadow-primary/40 hover:shadow-primary/60 transition-all hover:scale-105 disabled:opacity-60 disabled:hover:scale-100"
+          title="Nhắn tin với người bán"
+        >
+          {loading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <MessageCircle className="h-5 w-5" />
+          )}
+          <span className="font-bold text-sm hidden sm:inline">Nhắn người bán</span>
+        </button>
       )}
     </div>
   );

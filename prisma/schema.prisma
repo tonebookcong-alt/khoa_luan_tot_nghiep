@@ -22,7 +22,6 @@ enum Role {
 enum ListingStatus {
   DRAFT      // Mới tạo, chưa đăng
   ACTIVE     // Đang rao bán
-  RESERVED   // Đang giữ chỗ (đang trong giao dịch)
   SOLD       // Đã bán
   REMOVED    // Bị xóa/ẩn
 }
@@ -33,14 +32,6 @@ enum DeviceCondition {
   GOOD       // Tốt (90-98%)
   FAIR       // Khá (70-89%)
   POOR       // Kém (<70%)
-}
-
-enum TransactionStatus {
-  PENDING    // Buyer vừa đặt mua, chưa thanh toán
-  ESCROWED   // Đã thanh toán, tiền đang tạm giữ
-  COMPLETED  // Giao dịch hoàn tất, tiền giải ngân
-  REFUNDED   // Hoàn tiền cho Buyer
-  DISPUTED   // Đang tranh chấp
 }
 
 // ==================== MODELS ====================
@@ -65,8 +56,6 @@ model User {
   updatedAt    DateTime @updatedAt
 
   listings           Listing[]        @relation("SellerListings")
-  buyerTransactions  Transaction[]    @relation("BuyerTransactions")
-  sellerTransactions Transaction[]    @relation("SellerTransactions")
   sentMessages       Message[]        @relation("SentMessages")
   buyerConversations Conversation[]   @relation("BuyerConversations")
   sellerConversations Conversation[]  @relation("SellerConversations")
@@ -94,6 +83,7 @@ model Category {
   id        String     @id @default(cuid())
   name      String
   slug      String     @unique
+  imageUrl  String?
   parentId  String?
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children  Category[] @relation("CategoryTree")
@@ -132,7 +122,6 @@ model Listing {
   accessories   String?         // Phụ kiện kèm theo, VD: "Củ sạc, Cáp sạc"
 
   images        ListingImage[]
-  transactions  Transaction[]
   conversations Conversation[]
   priceHistory  PriceHistory[]
 
@@ -154,36 +143,6 @@ model ListingImage {
   createdAt DateTime @default(now())
 
   @@index([listingId])
-}
-
-model Transaction {
-  id         String            @id @default(cuid())
-  listingId  String
-  listing    Listing           @relation(fields: [listingId], references: [id])
-  buyerId    String
-  buyer      User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  sellerId   String
-  seller     User              @relation("SellerTransactions", fields: [sellerId], references: [id])
-
-  amount     Int               // Tổng tiền giao dịch (VND)
-  commission Int               @default(0) // Phí hoa hồng (VND)
-  status     TransactionStatus @default(PENDING)
-
-  // VNPAY
-  vnpayRef   String?           @unique // Mã tham chiếu VNPAY
-  vnpayData  Json?             // Raw data từ VNPAY IPN
-
-  confirmedByBuyer  Boolean  @default(false)
-  confirmedBySeller Boolean  @default(false)
-
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-
-  @@index([listingId])
-  @@index([buyerId])
-  @@index([sellerId])
-  @@index([status])
-  @@index([vnpayRef])
 }
 
 model Conversation {

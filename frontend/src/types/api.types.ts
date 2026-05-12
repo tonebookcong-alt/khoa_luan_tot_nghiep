@@ -62,11 +62,50 @@ export interface PublicSeller {
 }
 
 export interface AiPriceResult {
-  P_market: number;
-  P_final: number;
+  // Field cũ (giữ tương thích)
+  P_market?: number;
+  P_final?: number;
+  // Field mới khớp với EstimateResponseDto của backend
+  pMarket?: number;
+  pFinal?: number;
   confidenceScore: number;
   priceRange: { low: number; high: number };
-  damageBreakdown: { part: string; severity: number; weight: number }[];
+  damageBreakdown: {
+    part: string;
+    severity: number;
+    weight: number;
+    description?: string;
+    deductionPercent?: number;
+  }[];
+  detectedModel?: string;
+  overallCondition?: string;
+  summary?: string;
+  marketSummary?: string;
+  dataPoints?: number;
+  detectedGeneration?: string | null;
+  claimedModel?: string;
+  claimedMatches?: boolean;
+  damageDetections?: AiDamageDetection[];
+  images?: AiImageMeta[];
+}
+
+export interface AiDamageDetection {
+  label: string;
+  labelDisplay: string;
+  confidence: number;
+  imageIndex: number;
+  bbox: { xMin: number; yMin: number; xMax: number; yMax: number };
+  imageWidth: number;
+  imageHeight: number;
+  areaRatio: number;
+  location: 'screen' | 'housing' | 'camera' | 'other';
+}
+
+export interface AiImageMeta {
+  index: number;
+  width: number;
+  height: number;
+  detectionCount: number;
 }
 
 export interface PaginatedResponse<T> {

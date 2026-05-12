@@ -1,6 +1,10 @@
-import mongoose, { Schema, Document } from 'mongoose'
+import mongoose, { Schema } from 'mongoose'
 
-export interface IMarketPriceRaw extends Document {
+/**
+ * Shape của 1 document — không extend Document để tránh xung đột field `model`
+ * với mongoose.Document.model() (built-in method).
+ */
+export interface IMarketPriceRaw {
   brand: string
   model: string
   source: string       // URL nguồn hoặc tên nguồn

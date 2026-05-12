@@ -1,0 +1,15 @@
+path: C:/khoa_luan_tot_nghiep/ai-service-vision/data/yolo_dataset_generation
+train: train/images
+val: valid/images
+test: test/images
+nc: 9
+names:
+- gen_11
+- gen_12_13
+- gen_14
+- gen_15
+- gen_16
+- gen_17
+- gen_6
+- gen_7_8
+- gen_x_xs

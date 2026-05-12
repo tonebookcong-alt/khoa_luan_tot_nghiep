@@ -1,0 +1,23 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+nc: 12
+names:
+- physical_damage
+- gen_11
+- gen_12_13
+- gen_14
+- gen_15
+- gen_16
+- gen_17
+- gen_6
+- gen_7_8
+- gen_x_xs
+- scratch
+- screen_defect
+roboflow:
+  workspace: thngs-workspace-akqw8
+  project: iphone-pricing-detection
+  version: 2
+  license: Private
+  url: https://app.roboflow.com/thngs-workspace-akqw8/iphone-pricing-detection/2

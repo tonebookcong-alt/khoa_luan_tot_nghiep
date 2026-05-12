@@ -24,7 +24,6 @@ cp .env.example .env
 
 Mở `.env` và điền các giá trị cần thiết:
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — từ Google Cloud Console
-- `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET` — từ VNPAY sandbox
 - `GEMINI_API_KEY` — đã được điền sẵn để demo
 
 ### 2. Build và khởi động tất cả services
@@ -111,8 +110,8 @@ cd backend
 # Chạy tất cả unit tests
 npm run test
 
-# Chỉ chạy 2 test bắt buộc
-npx jest --testPathPatterns="pricing-calculator|vnpay" --no-coverage
+# Chạy test bắt buộc
+npx jest --testPathPatterns="pricing-calculator" --no-coverage
 ```
 
 ---
@@ -142,8 +141,6 @@ npx jest --testPathPatterns="pricing-calculator|vnpay" --no-coverage
 | `JWT_REFRESH_SECRET` | Secret cho refresh token | ✅ |
 | `GEMINI_API_KEY` | Google Gemini Vision API | ✅ |
 | `GOOGLE_CLIENT_ID` | Google OAuth2 | Để dùng "Login Google" |
-| `VNPAY_TMN_CODE` | VNPAY Terminal Code | Để test thanh toán |
-| `VNPAY_HASH_SECRET` | VNPAY Hash Secret | Để test thanh toán |
 
 ---
 

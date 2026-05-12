@@ -77,11 +77,23 @@ def _is_inside_top_half(damage: BoundingBox, body: BoundingBox) -> bool:
     return damage_center_y < body.y_min + body_height * 0.55
 
 
-def calculate_damage_scores(per_image: list[ImageDetections]) -> DamageScores:
+def calculate_damage_scores(
+    per_image: list[ImageDetections],
+    damage_detections: list[ImageDetections] | None = None,
+) -> DamageScores:
+    """
+    Calculate damage scores from detections.
+    If damage_detections provided (from dedicated damage model), use those.
+    Otherwise, use damage labels from generation model detections.
+    """
     scores = DamageScores()
 
-    for img in per_image:
+    # Use dedicated damage model if available, else use generation model
+    detection_source = damage_detections if damage_detections is not None else per_image
+
+    for img_idx, img in enumerate(per_image):
         body_box: BoundingBox | None = None
+        # Get body box from generation model
         for det in img.detections:
             if det.label in GENERATION_LABELS:
                 body_box = det.bbox
@@ -92,22 +104,58 @@ def calculate_damage_scores(per_image: list[ImageDetections]) -> DamageScores:
         if body_area <= 0:
             continue
 
-        for det in img.detections:
-            if det.label not in DAMAGE_AREA_THRESHOLDS:
+        # Get damage detections from appropriate source
+        damage_dets = (
+            detection_source[img_idx].detections
+            if img_idx < len(detection_source)
+            else []
+        )
+
+        for det in damage_dets:
+            # Map damage labels: generation model (crack, scratch, dent) vs damage model (physical_damage, scratch, screen_defect)
+            if det.label not in DAMAGE_AREA_THRESHOLDS and det.label not in {
+                "physical_damage",
+                "screen_defect",
+            }:
                 continue
+
             damage_area = _bbox_area(det.bbox)
-            ratio = damage_area / body_area
-            major_threshold = DAMAGE_AREA_THRESHOLDS[det.label]["major"]
+            ratio = damage_area / body_area if body_area > 0 else 0.0
+
+            # Get threshold based on label
+            label_key = det.label
+            if det.label == "physical_damage":
+                # physical_damage from dedicated model ~ crack + dent
+                label_key = "crack"
+            elif det.label == "screen_defect":
+                # screen_defect ~ crack on screen
+                label_key = "crack"
+
+            if label_key not in DAMAGE_AREA_THRESHOLDS:
+                continue
+
+            major_threshold = DAMAGE_AREA_THRESHOLDS[label_key]["major"]
             severity = min(1.0, ratio / major_threshold) * det.confidence
 
-            if det.label == "crack":
-                if _is_inside_top_half(det.bbox, body_box):
-                    scores.screen = max(scores.screen, severity)
+            if det.label in {"crack", "physical_damage"}:
+                if det.label == "crack":
+                    # Original logic: crack on top half = screen, else body
+                    if _is_inside_top_half(det.bbox, body_box):
+                        scores.screen = max(scores.screen, severity)
+                    else:
+                        scores.body = max(scores.body, severity)
                 else:
-                    scores.body = max(scores.body, severity)
+                    # physical_damage from damage model: treat as crack but assume screen if score high
+                    if severity > 0.5:
+                        scores.screen = max(scores.screen, severity)
+                    else:
+                        scores.body = max(scores.body, severity)
             elif det.label == "scratch":
                 scores.body = max(scores.body, severity * 0.7)
             elif det.label == "dent":
                 scores.body = max(scores.body, severity * 0.8)
+            elif det.label == "screen_defect":
+                # screen_defect from damage model
+                scores.screen = max(scores.screen, severity)
 
     return scores

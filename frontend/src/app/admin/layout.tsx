@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, Users, ListChecks, CreditCard, LogOut,
+  LayoutDashboard, Users, ListChecks, LogOut, Tags,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -11,7 +11,7 @@ const NAV = [
   { href: '/admin/dashboard', label: 'Tổng quan', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Người dùng', icon: Users },
   { href: '/admin/listings', label: 'Tin đăng', icon: ListChecks },
-  { href: '/admin/transactions', label: 'Giao dịch', icon: CreditCard },
+  { href: '/admin/categories', label: 'Danh mục', icon: Tags },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!mounted || !user || user.role !== 'ADMIN') return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 pt-20">
       {/* Sidebar */}
       <aside className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col pt-6">
         <div className="px-6 mb-6">

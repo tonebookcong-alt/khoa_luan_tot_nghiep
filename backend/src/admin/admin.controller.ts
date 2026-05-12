@@ -8,8 +8,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { ListingStatus, TransactionStatus } from '@prisma/client';
+import { IsEnum } from 'class-validator';
+import { ListingStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -42,6 +42,13 @@ export class AdminController {
     return this.adminService.getStats();
   }
 
+  @Get('stats/daily')
+  @ApiOperation({ summary: 'Số tin đăng & user mới theo ngày (mặc định 7 ngày)' })
+  @ApiQuery({ name: 'days', required: false })
+  getDailyStats(@Query('days') days = '7') {
+    return this.adminService.getDailyStats(+days);
+  }
+
   @Get('stats/price-history')
   @ApiOperation({ summary: 'Biến động giá theo model' })
   @ApiQuery({ name: 'model', required: false })
@@ -53,20 +60,23 @@ export class AdminController {
     return this.adminService.getPriceHistory(model, brand);
   }
 
-  @Get('stats/commission')
-  @ApiOperation({ summary: 'Doanh thu hoa hồng theo tháng' })
-  getCommissionByMonth() {
-    return this.adminService.getCommissionByMonth();
-  }
-
   // ── Users ──────────────────────────────────────────────────────────
 
   @Get('users')
-  @ApiOperation({ summary: 'Danh sách người dùng (phân trang)' })
+  @ApiOperation({ summary: 'Danh sách người dùng (phân trang + search/filter)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  getUsers(@Query('page') page = '1', @Query('limit') limit = '20') {
-    return this.usersService.findAll(+page, +limit);
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['active', 'banned'] })
+  @ApiQuery({ name: 'role', required: false, enum: ['BUYER', 'SELLER', 'ADMIN'] })
+  getUsers(
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+    @Query('search') search?: string,
+    @Query('status') status?: 'active' | 'banned',
+    @Query('role') role?: string,
+  ) {
+    return this.usersService.findAll(+page, +limit, { search, status, role });
   }
 
   @Patch('users/:id')
@@ -97,20 +107,5 @@ export class AdminController {
     @Body() dto: UpdateListingStatusDto,
   ) {
     return this.adminService.updateListingStatus(id, dto.status);
-  }
-
-  // ── Transactions ───────────────────────────────────────────────────
-
-  @Get('transactions')
-  @ApiOperation({ summary: 'Danh sách giao dịch (phân trang + filter)' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'status', required: false, enum: TransactionStatus })
-  getTransactions(
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-    @Query('status') status?: TransactionStatus,
-  ) {
-    return this.adminService.getTransactions(+page, +limit, status);
   }
 }
