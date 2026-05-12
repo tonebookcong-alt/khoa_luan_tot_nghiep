@@ -17,8 +17,6 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CurrentUser, JwtPayload } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GoogleProfile } from './strategies/google.strategy';
@@ -58,25 +56,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Đăng xuất' })
   logout(@CurrentUser() _user: JwtPayload) {
-    // Stateless JWT — client xóa token ở phía client
     return { message: 'Đăng xuất thành công' };
-  }
-
-  @Post('forgot-password')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { ttl: 60_000, limit: 3 } })
-  @ApiOperation({ summary: 'Gửi email đặt lại mật khẩu' })
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    await this.authService.forgotPassword(dto.email);
-    return { message: 'Nếu email tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu.' };
-  }
-
-  @Post('reset-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Đặt lại mật khẩu bằng token từ email' })
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    await this.authService.resetPassword(dto.token, dto.newPassword);
-    return { message: 'Mật khẩu đã được cập nhật thành công. Vui lòng đăng nhập lại.' };
   }
 
   @Get('google')
@@ -96,7 +76,7 @@ export class AuthController {
     const result = await this.authService.googleLogin(req.user);
     const frontendUrl = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
     res.redirect(
-      `${frontendUrl}/auth/callback?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`,
+      `${frontendUrl}/callback?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`,
     );
   }
 }

@@ -53,10 +53,6 @@ model User {
   avatar       String?
   isBanned     Boolean  @default(false)
 
-  // Password reset
-  resetPasswordToken   String?   @unique
-  resetPasswordExpires DateTime?
-
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
