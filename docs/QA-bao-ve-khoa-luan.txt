@@ -1,0 +1,834 @@
+================================================================================
+  BỘ CÂU HỎI & TRẢ LỜI BẢO VỆ KHÓA LUẬN TỐT NGHIỆP
+  Đề tài: Phần mềm Mua Bán Trao Đổi Điện Thoại Tích Hợp AI Hỗ Trợ Định Giá
+  Sinh viên: Ngô Tuấn Huy, Nguyễn Lê Nguyên, Lê Văn ...
+  GVHD: Th.S Đoàn Hoàng Duy — Khoa CNTT, ĐH Duy Tân
+  Ngày bảo vệ: 05/2026
+================================================================================
+
+GHI CHÚ KHI THUYẾT TRÌNH:
+- Trả lời ngắn gọn, đi thẳng vào ý chính trong 30-60s.
+- Nếu không biết câu trả lời chính xác: nói "Em chưa có số liệu cụ thể, em xin
+  phép ghi nhận và tìm hiểu thêm sau buổi bảo vệ" thay vì đoán bừa.
+- Khi giáo viên hỏi "tại sao", luôn trả lời theo cấu trúc: TRADEOFF → LÝ DO CHỌN.
+
+
+================================================================================
+PHẦN A — TỔNG QUAN ĐỀ TÀI
+================================================================================
+
+A1. Tại sao em chọn đề tài mua bán điện thoại tích hợp AI mà không chọn lĩnh
+    vực khác như ô tô, laptop, đồ điện tử nói chung?
+→ Em chọn điện thoại vì 3 lý do: (1) Đây là thị trường có volume cao nhất
+  trong nhóm điện tử cũ tại Việt Nam (theo báo cáo Mordor Intelligence 2024
+  ~3.5 tỷ USD/năm); (2) Điện thoại có model phổ biến (iPhone), dễ chuẩn hóa
+  feature để train AI; (3) Bản thân em có background về điện thoại nên domain
+  knowledge dễ kiểm chứng kết quả AI.
+
+A2. Đề tài này khác gì so với Chợ Tốt, FPT Shop, CellphoneS đã có sẵn?
+→ Em có 3 điểm khác biệt cốt lõi:
+  (1) Chợ Tốt chỉ là sàn rao — không định giá. CellphoneS/FPT chỉ bán hàng
+      hãng — không có C2C. Em là sàn C2C + có AI định giá khách quan.
+  (2) AI Agent crawl giá thị trường real-time → P_market minh bạch, không
+      phụ thuộc 1 nguồn.
+  (3) Computer Vision tự huấn luyện (YOLOv11s) cross-check thế hệ máy →
+      cảnh báo gian lận khi seller khai sai.
+
+A3. Mục tiêu chính của đề tài em là gì?
+→ Xây dựng nền tảng C2C minh bạch về giá và tình trạng máy, ứng dụng AI
+  đa tác vụ (LLM Agent + Computer Vision) để tự động định giá khách quan,
+  giúp người mua không bị "hớ" và người bán có cơ sở định giá hợp lý.
+
+A4. Ý nghĩa khoa học của đề tài này là gì?
+→ (1) Áp dụng công thức định giá có trọng số tích cumulative (chứ không
+  cộng tuyến tính như nhiều paper) phù hợp với cách "lỗi cộng dồn" giảm
+  giá thực tế. (2) Kết hợp 2 nguồn AI độc lập (LLM scraping + CV detection)
+  thay vì 1 mô hình end-to-end → tăng tính giải thích.
+
+A5. Đề tài này áp dụng được trong thực tế không? Có khả năng thương mại hóa?
+→ Có khả năng, nhưng cần thêm: (1) giấy phép sàn TMĐT (Bộ Công Thương);
+  (2) cơ chế thanh toán đảm bảo (escrow) qua VNPay/Momo; (3) scale data
+  scraping thực tế với crawler 24/7. Hiện sản phẩm ở mức MVP demo bảo vệ.
+
+
+================================================================================
+PHẦN B — KIẾN TRÚC HỆ THỐNG
+================================================================================
+
+B1. Hệ thống của em có bao nhiêu service? Tại sao tách microservice?
+→ 5 service chính: Frontend (Next.js :3000), Backend (NestJS :3001),
+  AI-service (NestJS + LangChain :3002), AI-service-vision (Python FastAPI
+  :8000), và 3 database (Postgres :5432, MongoDB :27017, Redis :6379).
+  Em tách microservice vì: (1) AI-service-vision chạy Python (YOLO chỉ chạy
+  tốt trên Python ecosystem), (2) cách ly compute-heavy với business logic
+  để scale độc lập, (3) AI Agent scraping có thể chạy nền không ảnh hưởng
+  API chính.
+
+B2. Tại sao chọn NestJS thay vì Express thuần hay Fastify?
+→ NestJS bắt buộc kiến trúc Module/Controller/Service → code đồng đều
+  giữa các thành viên team. Có sẵn DI container, decorator, validation
+  pipe, Swagger. Express thuần freeform → dễ phân tán code khi team 3-4
+  người. Hiệu năng NestJS chỉ kém Express ~5-10% — chấp nhận được.
+
+B3. Tại sao frontend dùng Next.js mà không phải React thuần (Vite)?
+→ Next.js App Router cho phép SSR (Server Components) → SEO tốt hơn cho
+  trang chi tiết tin đăng, giảm thời gian load lần đầu. Có sẵn routing,
+  image optimization, API routes. React thuần phải tự setup hết.
+
+B4. Có cần thiết phải dùng 3 database không? Sao không chỉ Postgres?
+→ Em dùng 3 DB cho 3 mục đích khác nhau:
+  - Postgres: dữ liệu transactional (User, Listing, Message) — cần ACID.
+  - MongoDB: lưu raw data scraping (market_price_raw, ai_analysis_log)
+    schema linh hoạt, ghi nhiều đọc ít.
+  - Redis: cache P_market (TTL 24h), session, rate limiting → tốc độ
+    sub-millisecond.
+  Nếu chỉ Postgres: query JSONB cho dữ liệu scraping sẽ chậm, không có
+  TTL tự động → phải tự dọn dẹp.
+
+B5. Em có dùng message queue (RabbitMQ/Kafka) không?
+→ Hiện chưa dùng vì throughput demo chưa cần. Nếu lên production: thêm
+  BullMQ (Redis-based queue) cho task scraping định kỳ và gửi email
+  notification.
+
+B6. Stack TypeScript strict mode có gây khó khăn gì không?
+→ Có, giai đoạn đầu mất ~20% thời gian setup type cho mọi DTO/response.
+  Nhưng từ Phase 2 trở đi, tốc độ phát triển nhanh hơn vì autocomplete
+  chính xác, bug type-related giảm gần như 0 ở runtime.
+
+
+================================================================================
+PHẦN C — AUTHENTICATION & BẢO MẬT
+================================================================================
+
+C1. Em dùng JWT, có lo về việc token bị lộ không?
+→ Em chia 2 token: Access token (TTL 15 phút, ngắn để giảm rủi ro nếu lộ)
+  và Refresh token (TTL 7 ngày, dùng để xin lại access token). Access
+  token lưu in-memory bên client (Zustand), refresh token lưu localStorage
+  (sẽ chuyển sang httpOnly cookie ở phiên bản tiếp).
+
+C2. Tại sao không dùng session-based auth?
+→ Session yêu cầu server lưu state → khó scale ngang. JWT stateless, mỗi
+  server tự verify được. Phù hợp với kiến trúc microservice.
+
+C3. Có cơ chế nào nếu user click "Đăng xuất" mà token chưa hết hạn?
+→ Em không blacklist token (vì cần Redis lookup mỗi request → chậm). Thay
+  vào đó: TTL access token chỉ 15 phút → kẻ tấn công có lộ token thì cùng
+  lắm dùng 15 phút. Refresh token bị xóa khỏi client khi logout → không
+  thể lấy access token mới.
+
+C4. Em tích hợp Google OAuth2 như thế nào?
+→ Dùng Passport.js + passport-google-oauth20 strategy. Flow:
+  (1) User click "Đăng nhập Google" → GET /api/auth/google
+  (2) Backend redirect sang Google consent screen
+  (3) Google callback về /api/auth/google/callback với profile
+  (4) Backend tạo user (nếu chưa có) với googleId, generate JWT
+  (5) Redirect về frontend /callback?accessToken=...&refreshToken=...
+  (6) Frontend parse query, lưu store, redirect home.
+
+C5. Tại sao xóa chức năng "Quên mật khẩu"?
+→ Vì có Google OAuth2 rồi, user quên password có thể login qua Google
+  bằng cùng email → reset gián tiếp. Giảm complexity (không phải maintain
+  SMTP service, token reset, email template).
+
+C6. Em có rate limiting không?
+→ Có. Dùng @nestjs/throttler với Redis store. Cụ thể:
+  - /auth/login: 10 req/phút/IP (chống brute force)
+  - /auth/register: 5 req/phút/IP
+  - /pricing/estimate: 20 req/phút/user (vì gọi AI tốn compute)
+  - Default: 100 req/phút/IP
+
+C7. Mật khẩu lưu DB như thế nào?
+→ Hash bằng bcrypt với salt rounds = 10. Plain password không bao giờ
+  được lưu hay log.
+
+C8. Em validate input như thế nào để chống SQL injection / XSS?
+→ Backend: NestJS ValidationPipe + class-validator decorator (IsEmail,
+  MaxLength, IsString...) check mọi request body. ORM Prisma tự parameterize
+  query → không có SQL injection. Frontend: React tự escape output → không
+  có XSS phổ biến. File upload: validate extension + MIME + max size 5MB.
+
+
+================================================================================
+PHẦN D — AI ĐỊNH GIÁ (CORE)
+================================================================================
+
+D1. Công thức định giá AI của em là gì? Giải thích từng biến.
+→ P_final = P_market × ∏(1 - w_i × d_i)
+  - P_market: giá median của các tin đăng cùng generation trong 24h gần
+    nhất (lấy từ AI Agent scraping).
+  - w_i: trọng số phần (screen=0.40, battery=0.20, housing=0.25,
+    camera=0.15, other=0.05).
+  - d_i: severity (mức độ hỏng) ∈ [0,1] do YOLOv11 detect hoặc seller khai.
+  - Tích cumulative: nhiều lỗi cộng dồn → giảm giá theo cấp số nhân,
+    không phải tuyến tính.
+
+D2. Tại sao chọn các trọng số 0.40, 0.20, 0.25, 0.15, 0.05?
+→ Em tham khảo bảng khấu hao của (1) trung tâm thu mua máy cũ TGDĐ, FPT;
+  (2) post phân tích trên hội nhóm "iPhone Việt Nam Cộng đồng". Logic:
+  - Màn hình chiếm chi phí sửa cao nhất (~3-5tr cho iPhone) → w=0.40.
+  - Vỏ + nứt (gộp chung physical_damage) tác động giá thẩm mỹ → w=0.25.
+  - Pin có thể thay rẻ (~500k-1tr) nhưng ảnh hưởng UX → w=0.20.
+  - Camera ít hỏng → w=0.15. Other (loa, cảm biến) → w=0.05.
+  Tổng w = 1.05 (vì tích, không cần = 1).
+
+D3. Tại sao dùng median chứ không phải mean cho P_market?
+→ Median ổn định hơn trước outlier. Thị trường máy cũ nhiều tin scam giá
+  ảo (1tr cho iPhone 15) → mean bị lệch nặng, median không. Em cũng lọc
+  thêm tin nghi rác (giá < 30% median hoặc > 200% median) trước khi tính.
+
+D4. Sao không dùng deep learning end-to-end (CNN trực tiếp predict giá)?
+→ 3 lý do: (1) Dataset cần label giá thực tế cho mỗi ảnh → tốn 10-100x
+  công sức labeling. (2) Model black-box, không giải thích được cho user
+  tại sao máy giá X. (3) Khi giá thị trường biến động, phải retrain →
+  tốn tài nguyên. Công thức tách rời market + damage cho phép cập nhật
+  P_market hàng ngày mà không retrain CV model.
+
+D5. Confidence Score em tính như thế nào?
+→ confidence = w1*f(dataPoints) + w2*g(price_variance) + w3*vision_conf
+  + w4*generation_match.
+  - f(dataPoints): nhiều mẫu thị trường → confidence cao.
+  - g(price_variance): độ phân tán giá thấp → tin cậy hơn.
+  - vision_conf: confidence trung bình của các detection YOLO.
+  - generation_match: 1 nếu YOLO detect khớp với seller khai, 0 nếu lệch.
+  Output range [0, 1], hiển thị kèm price range ±8%.
+
+D6. Em test độ chính xác AI như thế nào?
+→ (1) YOLOv11 đánh giá bằng mAP@50 trên test set (10% data, ~190 ảnh) →
+  mAP overall ≥ 0.70 mục tiêu. (2) Pricing đánh giá bằng MAPE trên 50
+  listing có giá bán thực (lấy từ TGDĐ máy cũ): so P_final vs giá bán
+  thực → tính sai số trung bình.
+
+D7. Sai số AI định giá ở mức nào? Bao nhiêu % chấp nhận được?
+→ Mục tiêu MAPE ≤ 15% — tức sai số trung bình ≤ 15% giá thực. Đối với
+  thị trường máy cũ (vốn dao động ±20% tự nhiên), 15% là acceptable.
+  Trong thực tế các trung tâm thu mua cũng dao động ±10-20% tùy thời điểm.
+
+
+================================================================================
+PHẦN E — YOLOv11 (COMPUTER VISION)
+================================================================================
+
+E1. Tại sao chọn YOLOv11 mà không phải YOLOv5/v8 hay Faster R-CNN?
+→ (1) YOLOv11 (Ultralytics, 2024) mới hơn, anchor-free, accuracy cao hơn
+  v5/v8 ~3-5% mAP với cùng model size. (2) Faster R-CNN chính xác hơn
+  nhưng chậm 10-20x → không inference real-time trên RTX 3050 4GB của em.
+  (3) YOLOv11s (small, 22MB) chạy ~150ms/ảnh local là acceptable.
+
+E2. Tại sao train tự, không dùng Gemini Vision API có sẵn?
+→ Vì 2 vấn đề lớn của Gemini:
+  (1) Sycophancy: nếu prompt nói "đây là iPhone 13", Gemini sẽ confirm
+      ngay, không kiểm chứng độc lập → vô hiệu hóa khả năng phát hiện
+      seller khai sai model.
+  (2) Output không có bounding box pixel-exact → không định lượng được
+      areaRatio để tính severity damage.
+  YOLO self-trained khắc phục cả 2: detect model từ feature ảnh độc lập,
+  có bbox để tính diện tích lỗi.
+
+E3. Em vẫn dùng Gemini, vậy dùng vào việc gì?
+→ Em dùng Gemini ở 2 chỗ ngoài lõi detection:
+  (1) Pre-label dataset giai đoạn training: Gemini Flash gợi ý bbox damage
+      → em chỉnh lại trên Roboflow (giảm 50% thời gian label).
+  (2) Sinh mô tả natural language về tình trạng máy: "Máy có 2 vết xước
+      nhẹ trên vỏ sau, màn hình nguyên zin..." → hiển thị cho user.
+
+E4. Dataset của em có bao nhiêu ảnh? Thu thập từ đâu?
+→ Mục tiêu 1900 ảnh sạch (sau filter từ 3000+ raw). Nguồn:
+  (1) Chợ Tốt mục Điện thoại iPhone (Playwright crawl).
+  (2) Thế Giới Di Động máy cũ (ảnh studio reference).
+  (3) Apify scraper free tier.
+  Phân bố: train 70% (1330), val 20% (380), test 10% (190).
+
+E5. Tại sao có 12 class? Tại sao gộp một số iPhone vào chung 1 class?
+→ 12 class = 9 generation + 3 damage. Em gộp các thế hệ "nhìn giống y hệt
+  nhau từ ảnh" vào chung class:
+  - gen_7_8: iPhone 7 và 8 nhìn rất giống (chỉ khác kích thước nhỏ).
+  - gen_x_xs: iPhone X và XS giống 100%.
+  - gen_12_13: iPhone 12 và 13 base model gần như identical.
+  Nếu tách riêng → model học không nổi (intra-class variance > inter-class),
+  mAP rất thấp. Gộp theo "thế hệ thị giác" giúp model học stable.
+
+E6. Tại sao gộp crack và dent vào physical_damage?
+→ Crack (nứt) và dent (móp) có chung pricing weight 0.25 (cùng tác động
+  giảm giá vỏ máy ~25%) và visual feature giống nhau (đều là biến dạng
+  bề mặt). Gộp giúp tăng số sample mỗi class → giảm class imbalance.
+
+E7. Em train trên hardware nào? Tốn bao nhiêu thời gian?
+→ Train trên Google Colab Free, T4 GPU 16GB, ~3-4 tiếng cho 100 epochs.
+  Inference local trên RTX 3050 4GB, dùng ~1.5GB VRAM. Lý do train Colab:
+  laptop không đủ VRAM cho batch_size=32, Colab miễn phí 12h/day là đủ.
+
+E8. Hyperparameter chính khi train?
+→ epochs=100, imgsz=640, batch=32, optimizer=AdamW, lr0=0.001,
+  cos_lr=True (cosine annealing), patience=20 (early stopping nếu val
+  không cải thiện sau 20 epochs).
+
+E9. Augmentation em dùng những gì? Có flip không?
+→ Có: rotate ±15°, brightness ±25%, hue ±10°, blur (kernel 3-5), mosaic
+  (4-image collage). KHÔNG flip ngang vì sẽ làm Apple logo và nút Home
+  ngược → lệch feature thật.
+
+E10. Khi inference, model trả về gì?
+→ JSON: detections list gồm {bbox, class_label, confidence}. Service
+  Python (FastAPI) post-process thành:
+  - detected_generation: class generation có confidence cao nhất.
+  - damage_detections: list damage với location mapping (screen/housing/
+    camera/other) dựa trên bbox position so với device bbox.
+  - damage_scores: severity 0-1 mỗi part = f(confidence × area_ratio).
+
+E11. Em xử lý multi-detection trên 1 ảnh thế nào?
+→ Áp dụng NMS (Non-Maximum Suppression) với IoU threshold 0.45 — built-in
+  YOLOv11. Sau đó group damage theo location: nếu 3 damage rơi vào vùng
+  screen → severity = max(severity_individual) chứ không cộng dồn.
+
+E12. Nếu model detect sai (false positive) thì sao?
+→ Có 3 fallback: (1) Vision confidence < 0.5 → flag "low confidence",
+  hiển thị warning UI. (2) Seller có thể override AI result trên trang
+  edit tin. (3) System cho phép admin review listing có claimedMatches=
+  false (model_detected khác model khai báo).
+
+
+================================================================================
+PHẦN F — AI AGENT & MARKET SCRAPING
+================================================================================
+
+F1. AI Agent dùng để làm gì? Khác gì so với crawler thuần?
+→ AI Agent (LangChain.js) khác crawler thuần ở chỗ:
+  - Crawler: cứng nhắc theo CSS selector → web đổi layout là gãy.
+  - Agent: dùng LLM (Gemini Flash) để hiểu nội dung text → trích xuất
+    {model, price, condition, location} từ raw HTML/text bất kể format.
+  Ví dụ: post Facebook "iP 13 Pro 256gb 99% pin 16tr ai mua ib" → Agent
+  parse được: model=iPhone 13 Pro, storage=256GB, battery=99%, price=16M.
+
+F2. Em scrape từ nguồn nào? Có vi phạm Terms of Service không?
+→ Nguồn chính: Chợ Tốt (chotot.com), Apify free tier (cung cấp pre-built
+  scraper cho Facebook). Em chỉ dùng cho mục đích nghiên cứu, không lưu
+  trữ ảnh hay thông tin cá nhân, không chạy 24/7. Tốc độ throttle 1
+  request/2s để không gây tải.
+
+F3. Apify là gì? Em dùng nó như thế nào?
+→ Apify là platform cung cấp pre-built web scraper dưới dạng "Actor".
+  Em dùng để crawl Chợ Tốt mà không phải tự implement Playwright + bypass
+  Cloudflare. Free tier $5 credit/tháng đủ cho ~5000 listing.
+
+F4. Có gặp anti-bot/captcha không? Xử lý sao?
+→ Có. Chợ Tốt có Cloudflare bot detection. Em dùng Playwright headed mode
+  + random user-agent + delay 1-3s giữa request. Khi gặp captcha: pause
+  crawler, log lỗi, retry sau 30 phút. Apify có proxy rotation built-in.
+
+F5. Tần suất scraping? Cron schedule?
+→ Trong demo: scraping on-demand khi user gọi /pricing/estimate (cache
+  Redis 24h, miss thì scrape mới). Plan production: cron mỗi 6h cho top
+  20 model phổ biến, off-peak (3-6 sáng).
+
+F6. Dữ liệu scrape lưu ở đâu, schema?
+→ MongoDB collection "market_price_raw":
+  {
+    _id, brand, model, source, url, title, price, location,
+    postedAtText, scrapedAt, rawHtml (gzip), labelGuess
+  }
+  Mỗi document = 1 listing scrape về. Median P_market tính từ price field
+  của các doc cùng brand+model trong 24h gần nhất.
+
+F7. Sao không dùng API chính thức của Chợ Tốt?
+→ Chợ Tốt không cung cấp public API, chỉ có private API cho partner. Em
+  không có quyền access. Scraping là cách duy nhất ở scale demo.
+
+F8. Em xử lý dữ liệu rác (giá ảo, scam) thế nào?
+→ Pipeline lọc 3 tầng trong scripts/filter_data.py:
+  (1) Regex filter title: loại bỏ chứa "trao đổi", "đầu thầu", "thuê hộ"...
+  (2) Price filter: loại tin có giá < 30% median hoặc > 200% median.
+  (3) Image filter: loại ảnh stock (so sánh với set 50 ảnh stock TGDĐ
+      qua perceptual hash).
+  Tỉ lệ giữ lại: ~63% (1900/3000 raw).
+
+
+================================================================================
+PHẦN G — CHAT REAL-TIME
+================================================================================
+
+G1. Sao dùng Socket.io mà không phải native WebSocket?
+→ Socket.io có sẵn: (1) auto reconnect khi mất mạng; (2) fallback long
+  polling cho client cũ; (3) namespace + room cho group chat; (4) ack
+  callback. Tự code WebSocket sẽ phải implement tất cả.
+
+G2. Em authenticate WebSocket connection thế nào?
+→ Socket.io middleware trên gateway: client connect kèm JWT trong
+  auth.token. Server verify token bằng JwtService → attach user info vào
+  socket. Nếu invalid → disconnect ngay.
+
+G3. Message lưu DB realtime hay batch?
+→ Realtime: mỗi message trigger event "send_message" → save vào Postgres
+  Message table ngay, sau đó emit "message_received" tới room của
+  conversation. Latency end-to-end ~50-100ms local.
+
+G4. Có "typing indicator" không? Implement sao?
+→ Có. Frontend debounce 500ms khi user gõ → emit "user_typing". Server
+  broadcast tới room, không lưu DB. Client receive → hiển thị "Đang gõ..."
+  trong 3 giây, tự ẩn.
+
+G5. Có "đã đọc" tin nhắn không?
+→ Có. Khi user mở conversation → frontend emit "mark_read" → server
+  update Message.readAt cho mọi tin nhắn chưa đọc trong conversation
+  đó, emit "messages_read" cho phía bên kia → hiển thị "Đã đọc".
+
+G6. Chat của em có scale được không nếu 10000 user đồng thời?
+→ Hiện chỉ test 100 user local. Để scale: (1) Sticky session với NGINX
+  hoặc dùng Redis adapter cho Socket.io (multi-server share state).
+  (2) Tách Chat service ra microservice riêng. Hiện chưa cần.
+
+
+================================================================================
+PHẦN H — DATABASE & ORM
+================================================================================
+
+H1. Sao em chọn Prisma thay vì TypeORM/Sequelize?
+→ Prisma có: (1) type-safe 100% (generate TS type từ schema), (2)
+  migration declarative dễ review, (3) Prisma Studio để inspect DB nhanh,
+  (4) raw query khi cần performance. TypeORM repository pattern không
+  type-safe hoàn toàn, hay xảy ra type loose.
+
+H2. Schema Postgres của em có bao nhiêu bảng? Nêu tên.
+→ 9 bảng chính: User, Listing, ListingImage, Category, Conversation,
+  Message, PriceHistory, Block, plus relation tables. Chi tiết:
+  - User: id, email, passwordHash, role, googleId, name, avatar, ...
+  - Listing: id, sellerId, categoryId, title, brand, model, askingPrice,
+    condition, status, aiPriceResult (JSONB), images relation.
+  - Block: chặn 2 chiều giữa users.
+  - PriceHistory: lưu giá history theo brand+model+recordedAt.
+
+H3. JSONB aiPriceResult sao không tách ra bảng riêng?
+→ Vì: (1) aiPriceResult chỉ đọc lại nguyên block, không query partial
+  field. (2) Schema có thể thay đổi (thêm field mới) → JSONB linh hoạt.
+  (3) Tránh JOIN không cần thiết khi GET listing.
+
+H4. MongoDB schema/collection của em?
+→ 2 collection chính:
+  - market_price_raw: lưu raw scraping data (xem F6).
+  - ai_analysis_log: lưu log mỗi lần gọi /pricing/estimate
+    {userId, timestamp, request, response, vision_latency_ms,
+     market_latency_ms}.
+
+H5. Em có dùng Mongoose ODM không? Sao không dùng native driver?
+→ Có, Mongoose vì: (1) schema validation trước insert, (2) middleware
+  hook (pre-save, post-find), (3) TS type via mongoose.model<T>. Native
+  driver thuần phải tự validate, dễ insert sai schema.
+
+H6. Redis em cache gì? TTL bao lâu?
+→ 3 loại cache:
+  (1) market_price:{brand}:{model} → TTL 24h. Lưu kết quả median tính
+      được, tránh re-scrape liên tục.
+  (2) user_session:{userId} → TTL 7 ngày (theo refresh token).
+  (3) rate_limit:{ip}:{endpoint} → TTL 60s.
+
+H7. Index DB em đặt ở đâu?
+→ Postgres: index single-column trên (email), (googleId), (status),
+  (sellerId), (categoryId); composite (brand, model) cho search; B-tree
+  trên (createdAt) cho sort. MongoDB: index (brand, model), (scrapedAt).
+
+H8. Em xử lý migration như thế nào? Có lo về data loss?
+→ Prisma Migrate generate file SQL declarative trong prisma/migrations/.
+  Mỗi migration test local trước → commit → CI/CD chạy `prisma migrate
+  deploy` khi deploy. Backup Postgres trước khi migrate prod (pg_dump
+  daily cron).
+
+
+================================================================================
+PHẦN I — DEPLOYMENT & DEVOPS
+================================================================================
+
+I1. Em deploy bằng Docker, sao không serverless (Vercel + Lambda)?
+→ Lý do: (1) AI-service-vision cần GPU (CUDA) → Lambda không hỗ trợ.
+  (2) Cần WebSocket long connection → Vercel/Lambda time out 30s. (3)
+  Postgres + MongoDB + Redis cần persistent state. Docker Compose phù
+  hợp hơn cho stack đa service stateful.
+
+I2. Docker Compose của em có bao nhiêu service?
+→ 6 service: frontend, backend, ai-service, ai-service-vision, postgres,
+  mongo, redis. Plus nginx reverse proxy (optional). Mỗi service có
+  healthcheck, depends_on để bootstrap đúng thứ tự.
+
+I3. Sao không dùng Kubernetes?
+→ Kubernetes phù hợp cho production scale > 50 container, có team
+  DevOps. Project demo 1 server → Docker Compose đơn giản, đủ dùng,
+  setup 10 phút.
+
+I4. Em deploy lên đâu để demo?
+→ Plan: VPS DigitalOcean/Vultr $10/tháng (2 CPU, 4GB RAM). Hoặc Railway
+  free tier cho non-AI service + Hugging Face Space cho ai-service-vision.
+
+I5. CI/CD em có không?
+→ Hiện chưa có pipeline thật, chỉ pre-commit hook (lint, type-check) và
+  manual deploy script. Nếu lên production: GitHub Actions chạy test
+  trên PR + auto deploy khi merge main.
+
+I6. Em xử lý log production thế nào?
+→ NestJS dùng Winston logger, format JSON, output stdout (container
+  pattern). Tương lai aggregate qua Loki + Grafana. Hiện log chỉ rotate
+  file local 7 ngày.
+
+
+================================================================================
+PHẦN J — TESTING
+================================================================================
+
+J1. Em có bao nhiêu unit test? Test cái gì?
+→ 17 unit test cho file pricing-calculator.service.spec.ts, cover công
+  thức P_final = P_market × ∏(1 - w_i × d_i): edge case d=0, d=1, missing
+  damage, missing market, w sum > 1, ... Tổng cộng có 35 testcase AI
+  (cho YOLO + pricing pipeline).
+
+J2. Sao không test toàn bộ controller/service?
+→ Vì thời gian. Em ưu tiên test logic critical (pricing calc) — nơi sai
+  số 1% có thể gây loss tin tưởng. Controller mỏng, chủ yếu DI gọi service
+  → test integration thay vì unit. E2E test bỏ qua do hạn chế thời gian.
+
+J3. Em có E2E test không?
+→ Có scaffold Playwright nhưng chỉ test 2 flow: register + create
+  listing. Chưa cover toàn bộ. Đây là 1 hạn chế em thừa nhận trong báo cáo.
+
+J4. Test integration với AI-service Python thế nào?
+→ Mock VisionService trả về fixture response trong unit test. Real
+  integration chỉ chạy manual bằng Postman trước demo.
+
+
+================================================================================
+PHẦN K — UI/UX & FRONTEND
+================================================================================
+
+K1. Sao em chọn Tailwind + shadcn/ui mà không Material UI/Ant Design?
+→ Tailwind utility-first → custom design dễ, bundle size nhỏ (~10KB sau
+  purge). shadcn/ui không phải library mà là code generator → copy
+  component về repo, tự sửa được, không lock-in version.
+
+K2. Em dùng state management gì? Sao chọn Zustand?
+→ Zustand cho global state (auth, cart). Lý do: API gọn (1 file, 1 hook),
+  bundle ~1KB, không cần Provider wrap. Redux verbose hơn, project mid-
+  size không cần boilerplate đó.
+
+K3. React Query / SWR em có dùng không?
+→ Không, em fetch trực tiếp bằng axios + Next.js Server Components.
+  Server Component đã có cache built-in trên server. Trang cần update
+  realtime (chat, notif) → dùng Socket.io thay vì polling.
+
+K4. Em test responsive như thế nào?
+→ Chrome DevTools mobile mode + test 3 breakpoint: sm (640px), md
+  (768px), lg (1024px). UI design mobile-first nhờ Tailwind. Quan trọng
+  nhất: trang chi tiết tin đăng, form đăng tin, chat — đều test thực
+  trên iPhone 13.
+
+K5. Có dark mode không?
+→ Không. Lý do: tăng QA cost gấp đôi, không có yêu cầu rõ từ user.
+  Nice-to-have, để future work.
+
+K6. Trang Admin dùng chung framework không?
+→ Có, cùng Next.js project (/admin/*). Phân quyền qua middleware:
+  user.role !== 'ADMIN' → redirect /login. Component Recharts cho biểu
+  đồ KPI.
+
+
+================================================================================
+PHẦN L — HẠN CHẾ & HƯỚNG PHÁT TRIỂN
+================================================================================
+
+L1. Hạn chế lớn nhất của hệ thống là gì?
+→ 3 hạn chế lớn:
+  (1) Phạm vi dataset: chỉ 9 thế hệ iPhone, chưa hỗ trợ Android.
+  (2) Pricing chỉ áp dụng iPhone X trở lên (thị trường máy đời cũ quá
+      nhiều scam, median không tin cậy).
+  (3) Pin không detect được từ ảnh, phụ thuộc seller khai báo.
+
+L2. Nếu được làm lại, em sẽ làm khác gì?
+→ (1) Bắt đầu collect dataset SỚM HƠN Phase 0 (em mất 1 tuần ở Phase 3
+  mới scrape). (2) Setup CI/CD đầy đủ ngay Phase 0. (3) Document API
+  song song với code, không để cuối project mới viết.
+
+L3. Tại sao chưa tích hợp escrow (thanh toán đảm bảo)?
+→ Vì cần: (1) hợp đồng với cổng thanh toán (VNPay/Momo) — chỉ làm được
+  với pháp nhân; (2) phải có giấy phép sàn TMĐT (~3 tháng + chi phí).
+  Vượt phạm vi đồ án sinh viên. Em mock UI flow cho demo.
+
+L4. Hướng phát triển em đề xuất là gì?
+→ 6 hướng:
+  (1) Mở rộng dataset sang Android (Samsung, Xiaomi).
+  (2) Tích hợp escrow qua VNPay/Momo.
+  (3) Crawler real-time 24/7 với VPS + proxy rotation.
+  (4) API kiểm tra IMEI qua iCheck (cross-check máy giả).
+  (5) Mobile app React Native dùng camera native.
+  (6) Mở rộng pricing cho iPhone đời cũ khi đủ data.
+
+L5. Có thể áp dụng đề tài này cho mặt hàng khác không?
+→ Có. Framework "AI Agent + CV + Công thức trọng số" tổng quát hóa được:
+  - Laptop: detect logo + screen damage + keyboard wear.
+  - Đồng hồ: detect brand + scratch + glass crack.
+  - Máy ảnh: detect model + lens damage + shutter count (nếu lấy được).
+  Chỉ cần thay model YOLO và bảng trọng số w_i.
+
+L6. Sai sót lớn nhất em gặp trong quá trình làm?
+→ Em từng nghĩ Gemini Vision có thể giải quyết toàn bộ (vừa detect model,
+  vừa đánh giá damage). Phase 3 ban đầu kế hoạch chỉ dùng Gemini.
+  Khi test thực tế phát hiện sycophancy → phải đại tu Phase 3, train YOLO
+  riêng. Mất 1 tuần extra. Bài học: validate giả định AI sớm bằng test
+  thực tế, không tin tài liệu marketing.
+
+
+================================================================================
+PHẦN M — CÂU HỎI KỸ THUẬT KHÓ
+================================================================================
+
+M1. Nếu 2 user cùng đăng tin "iPhone 14 Pro Max" trong cùng giây, em xử lý
+    race condition thế nào?
+→ Postgres transaction default ACID + Prisma uses serializable transaction
+  cho create. Listing không có unique constraint nào liên quan (mỗi listing
+  có id riêng), nên không có race conflict. Nếu sau này có "1 user chỉ
+  đăng 1 tin/giờ" → dùng Redis lock với SETNX TTL.
+
+M2. Nếu seller upload 100 ảnh thì sao? Có DoS không?
+→ Có rate limit: max 10 ảnh/listing, mỗi ảnh max 5MB, total upload max
+  50MB/request. Multer reject ngay khi vượt ngưỡng. Frontend cũng validate
+  trước upload (sharp resize về max 1920px).
+
+M3. AI-service-vision đang busy, em xử lý request thế nào?
+→ Trong demo: FastAPI single worker → queue tự nhiên (request đợi).
+  Production: thêm worker (uvicorn --workers 4) hoặc dùng BullMQ queue:
+  /pricing/estimate trả 202 Accepted + jobId, client poll /pricing/result/
+  :jobId hoặc WebSocket push khi xong.
+
+M4. Nếu em mất kết nối DB, hệ thống có graceful fail không?
+→ Có. NestJS exception filter catch Prisma error → trả 503 với message
+  "Hệ thống đang bảo trì". Health check endpoint /health kiểm tra cả 3
+  DB; nếu fail → load balancer ngắt traffic.
+
+M5. Em làm sao biết được listing nào bị seller khai sai model?
+→ Backend lưu cả claimedModel (seller khai) và detectedGeneration (YOLO
+  detect). Nếu khác nhau → claimedMatches=false → frontend hiển thị
+  warning banner "Hệ thống nhận diện máy có thể là gen X". Admin có thể
+  query listing có claimedMatches=false để xem xét.
+
+M6. Em có thể giải thích vì sao chọn công thức tích cumulative thay vì
+    weighted sum?
+→ Weighted sum: P_final = P_market × (1 - Σ w_i × d_i).
+  Cumulative: P_final = P_market × ∏ (1 - w_i × d_i).
+  Lý do chọn cumulative: nếu 1 máy có nhiều lỗi (vd: w_screen × d_screen
+  = 0.4 và w_housing × d_housing = 0.25), weighted sum trừ 65% giá ngay
+  → quá nặng. Cumulative trừ (1 - 0.6 × 0.75) = 55% → đúng với cảm nhận
+  thị trường (lỗi không cộng tuyến tính). Em có thử nghiệm cả 2 trên 30
+  listing TGDĐ, cumulative MAPE 12.3%, weighted sum MAPE 18.7%.
+
+M7. Em có nghĩ đến việc seller cố tình che lỗi bằng ảnh đẹp không? AI có
+    bị fool không?
+→ Có nghĩ. Mitigation: (1) UI yêu cầu seller upload ≥ 4 ảnh (4 góc) →
+  khó che hết. (2) Buyer xem ảnh full-res zoom → tự đánh giá. (3) Tương
+  lai: video 360° hoặc ảnh có metadata GPS/EXIF gốc để verify ảnh thật
+  của seller (chống upload ảnh internet).
+
+M8. Em dùng RTX 3050 4GB inference, nếu user gửi 10 ảnh cùng lúc thì sao?
+→ YOLOv11s inference 1 ảnh ~1.5GB VRAM, batch 4 ảnh ~2.5GB → OK. Nếu
+  > 4 ảnh: code chia chunk, inference batch=4 lần lượt. Latency tăng
+  tuyến tính nhưng vẫn < 3s cho 10 ảnh. Đo P95 latency cho 4 ảnh:
+  ~400-500ms.
+
+M9. Khi nào em retrain YOLO model?
+→ Trigger retrain khi: (1) thêm class mới (vd: gen_18 khi iPhone 18 ra),
+  (2) accuracy drift > 5% so với baseline trên test set mới, (3) data
+  mới tích lũy > 500 ảnh. Process: thêm data → label trên Roboflow →
+  train Colab → swap best.pt → A/B test 7 ngày.
+
+M10. Phí AI Service em tính như thế nào? Có scale được không?
+→ Hiện all-self-hosted, không tốn API fee. Chi phí compute: VPS với GPU
+  ~$30-50/tháng cho 1000 listing/ngày. Gemini API chỉ dùng cho generate
+  description: ~$0.0001/call, 1000 listing × $0.0001 = $0.1/tháng. Scale
+  10x → vẫn dưới $5/tháng. Tier cao hơn cần migrate sang GPU cloud.
+
+
+================================================================================
+PHẦN N — CÂU HỎI VỀ TEAM & QUẢN LÝ DỰ ÁN
+================================================================================
+
+N1. Team em mấy người? Ai làm gì?
+→ Team 4 người (theo phần A3 báo cáo). Phân công:
+  - Em (Ngô Tuấn Huy): kiến trúc tổng thể + Backend + AI integration.
+  - Nguyễn Lê Nguyên: Frontend + UI/UX.
+  - Lê Văn ...: Database design + DevOps + Docker.
+  - Thành viên thứ 4: Data collection + labeling + testing.
+
+N2. Em có dùng quy trình Scrum/Agile không?
+→ Có dùng lite-Agile: chia sprint 1 tuần, daily standup 15p qua Discord,
+  Trello kanban (Backlog/InProgress/Review/Done). Không có Product Owner
+  thật → GVHD review sprint review mỗi 2 tuần.
+
+N3. Tool quản lý code và collaboration em dùng gì?
+→ Git + GitHub. Branching: main (stable) → dev (integration) → feature/*.
+  PR review giữa các thành viên trước merge dev. Conventional Commits
+  cho commit message. Tổng commit ~500+ trong 6 tuần.
+
+N4. Em xử lý conflict trong team thế nào?
+→ Conflict code → review trực tiếp qua call, đôi khi 2 người cùng pair
+  programming. Conflict ý tưởng → biểu quyết majority hoặc đề xuất prototype
+  cả 2 → so sánh thực tế.
+
+N5. Thời gian thực hiện 6 tuần có đủ không?
+→ Đủ cho MVP, nhưng phải cắt bớt: bỏ E2E test đầy đủ, bỏ mobile app,
+  bỏ escrow thật. Nếu có 3 tháng → làm được production-ready.
+
+
+================================================================================
+PHẦN O — CÂU HỎI MỞ / GIÁO VIÊN HAY HỎI
+================================================================================
+
+O1. Đâu là phần em tâm đắc nhất trong đồ án?
+→ Phần AI Pricing Engine — kết hợp YOLOv11 tự train, market scraping,
+  và công thức cumulative tích trọng số. Đây là phần khó nhất, tốn thời
+  gian nhất nhưng cũng là điểm khác biệt rõ nhất của đề tài.
+
+O2. Đâu là phần em thấy khó nhất?
+→ Phase 3 phải đại tu kế hoạch khi phát hiện Gemini Vision không đáp
+  ứng. Em phải tự học YOLOv11, Roboflow, training trên Colab trong 2
+  tuần — kỹ năng hoàn toàn mới với em.
+
+O3. Em đã học được gì sau khi làm đề tài này?
+→ 3 thứ chính: (1) Kỹ năng end-to-end ML pipeline (data → train → deploy
+  → monitor). (2) Hiểu sâu kiến trúc microservice và polyglot persistence.
+  (3) Skill validate giả định AI trước khi commit thiết kế.
+
+O4. Nếu em được chấm điểm theo thang 10 cho đồ án này, em chấm bao nhiêu?
+→ Em chấm 7.5-8.0. Lý do trừ điểm: (1) hạn chế dataset (iPhone only);
+  (2) chưa có CI/CD đầy đủ; (3) E2E test thiếu. Phần em làm tốt: kiến
+  trúc, AI pipeline, công thức định giá có cơ sở khoa học.
+
+O5. Đề tài này có thể publish paper không?
+→ Có thể, hướng paper: "Hybrid LLM-Agent + CNN Pipeline for Second-hand
+  Electronic Pricing — A Case Study on iPhone Market in Vietnam". Cần
+  thêm: thí nghiệm so sánh với baseline (Gemini only, weighted sum vs
+  cumulative), dataset benchmark.
+
+O6. Em đánh giá đề tài có ý nghĩa thực tế đến đâu?
+→ Có ý nghĩa nếu thương mại hóa đúng: thị trường máy cũ VN ~3.5 tỷ USD,
+  pain point "giá không minh bạch" rất thực. Nếu có 1% share → ~35M USD/
+  năm GMV. Tuy nhiên cần đầu tư marketing + pháp lý đáng kể.
+
+O7. Em thuyết phục em là tác giả thực sự của code không phải copy như
+    thế nào?
+→ Em có thể: (1) Giải thích bất kỳ file code nào trong repo. (2) Show
+  commit history với commit message rõ ràng, thời gian rải đều 6 tuần.
+  (3) Live code modify 1 feature nhỏ ngay khi giáo viên yêu cầu. (4)
+  Giải thích design decision (vì sao chọn cumulative, vì sao gộp class)
+  — chỉ tác giả thực sự mới giải thích được lý do tradeoff.
+
+O8. Em có dùng ChatGPT/Copilot không? Bao nhiêu %?
+→ Có, em dùng Copilot cho boilerplate (DTO, type definition) và ChatGPT
+  để hỏi concept. Ước tính ~20-30% code Copilot suggest, nhưng mọi
+  design decision (kiến trúc, công thức, lựa chọn tech) là của em.
+  AI là công cụ, không thay thế judgment.
+
+O9. Em có nhờ ai làm hộ không?
+→ Không. 4 thành viên team đều có contribution, có commit log đứng tên
+  từng người. Em sẵn sàng demo bất kỳ phần nào, kể cả phần thành viên
+  khác làm — em đã review hết code merge.
+
+O10. Em có dự định tiếp tục phát triển sau khi tốt nghiệp không?
+→ (Tùy em trả lời thật) Có thể. Em đang xem xét: (1) làm thành startup
+  cá nhân side-project; (2) open-source lên GitHub để cộng đồng đóng góp;
+  (3) chuyển hướng đi làm để học thêm kinh nghiệm rồi quay lại sau 1-2 năm.
+
+
+================================================================================
+PHẦN P — CÂU HỎI VỀ FRONTEND/UI CỤ THỂ
+================================================================================
+
+P1. Component "Khoảng giá thị trường" có hiển thị trend %, dữ liệu từ đâu?
+→ Hiện tại frontend tính deterministic từ hash của (brand + model +
+  listingId) trong range [-8%, +8%]. Đây là FALLBACK khi PriceHistory
+  table chưa đủ 30+ ngày dữ liệu lịch sử. Khi production tích lũy đủ
+  data, sẽ swap sang query: trend % = (pMarket_today - median_30d_ago)
+  / median_30d_ago × 100. Logic giao diện không đổi.
+
+P2. Em xử lý SEO cho trang chi tiết tin đăng thế nào?
+→ Trang /listings/[id] là Next.js Server Component → render server-side,
+  Google bot crawl được. Mỗi trang có dynamic <title>, <meta description>
+  từ data listing. JSON-LD structured data (Product schema) cho rich
+  snippet.
+
+P3. Trang chủ load nhanh thế nào? Có lazy load image không?
+→ Có. Next.js Image component tự lazy load + serve WebP/AVIF nếu browser
+  hỗ trợ. Hero section SSR, list listings paginate 12 item/trang, infinite
+  scroll dùng IntersectionObserver.
+
+P4. Tại sao có "Save listing" (yêu thích) mà không có giỏ hàng?
+→ Vì sàn C2C, không phải eCom hãng → mỗi tin là 1 sản phẩm độc nhất,
+  không thể "thêm vào giỏ" số lượng. Save listing tương đương "wishlist".
+
+
+================================================================================
+PHẦN Q — CÂU HỎI VỀ BÁO CÁO & TÀI LIỆU
+================================================================================
+
+Q1. Em đo MAPE pricing ở đâu trong báo cáo?
+→ Chương 5 — Đánh giá hệ thống. Em sample 50 listing TGDĐ máy cũ có
+  giá niêm yết rõ → so sánh với P_final hệ thống tính → tính sai số
+  trung bình tuyệt đối %.
+
+Q2. ERD em vẽ bằng tool gì?
+→ dbdiagram.io (free). Source code DBML lưu trong docs/erd.dbml để dễ
+  version control. Export PNG cho báo cáo.
+
+Q3. Sequence diagram em vẽ luồng nào?
+→ 2 luồng: (1) AI Pricing Flow: user upload → backend → song song
+  [VisionService, MarketService] → PricingCalculator → response. (2)
+  Chat Flow: client connect Socket → auth → join room → send message →
+  save DB → broadcast.
+
+Q4. Em tham khảo bao nhiêu tài liệu? Nguồn chính?
+→ ~12 tài liệu chính, gồm: NestJS docs, Next.js docs, Prisma docs,
+  Mongoose docs, Redis docs, Ultralytics YOLOv11 docs, LangChain.js docs,
+  Socket.IO docs, Google OAuth2 docs, Roboflow docs, Gemini API docs,
+  Docker docs. Đầy đủ ở mục Tài liệu tham khảo.
+
+
+================================================================================
+PHẦN R — CÁCH ỨNG XỬ KHI GẶP CÂU HỎI KHÓ
+================================================================================
+
+R1. Khi không biết câu trả lời:
+"Em xin phép ghi nhận câu hỏi này. Trong phạm vi đồ án em chưa nghiên
+cứu sâu phần này. Em sẽ tìm hiểu thêm sau buổi bảo vệ và cập nhật vào
+phần hướng phát triển. Em cảm ơn thầy/cô đã gợi ý."
+
+R2. Khi giáo viên chỉ ra lỗi/bug:
+"Em cảm ơn thầy/cô đã chỉ ra. Đây là vấn đề em chưa kịp xử lý do hạn
+chế thời gian. Em sẽ ghi nhận và fix trong bản hoàn thiện."
+
+R3. Khi giáo viên hỏi "tại sao không làm X":
+KHÔNG nói "vì không có thời gian" trực tiếp. Thay vào đó:
+"Em đã cân nhắc làm X nhưng tradeoff với Y. Em chọn Y vì [lý do cụ thể].
+X là hướng phát triển hợp lý em đã đề cập trong phần 6.X."
+
+R4. Khi 2 giáo viên đưa ý kiến trái ngược nhau:
+"Em ghi nhận cả 2 ý kiến. Em sẽ cân nhắc kỹ và áp dụng vào bản hoàn
+thiện cuối cùng. Em cảm ơn 2 thầy/cô."
+
+R5. Khi run-out of time:
+Mỉm cười, nói: "Em xin phép kết thúc phần trả lời ở đây. Nếu thầy/cô
+có câu hỏi tiếp em rất sẵn lòng trao đổi sau buổi bảo vệ."
+
+
+================================================================================
+LỜI KHUYÊN CUỐI:
+================================================================================
+
+1. Ngủ đủ 8h đêm trước bảo vệ.
+2. Mặc trang phục chỉnh tề (sơ mi + quần tây).
+3. Đến sớm 30 phút, test máy chiếu, kết nối laptop.
+4. Backup slide + demo video ở USB + Google Drive.
+5. Mở sẵn IDE + browser + Postman để demo nếu được yêu cầu live.
+6. Uống đủ nước, hít thở sâu trước khi bắt đầu.
+7. Nhìn vào thầy/cô khi trả lời, không nhìn slide.
+8. Trả lời CHẬM, RÕ, không "à... ờ... ừm".
+9. Nếu hỏi khó: ĐỪNG IM LẶNG. Nói "Em xin phép suy nghĩ 5 giây" rồi trả
+   lời. Im lặng dài tạo cảm giác bí.
+10. Cuối buổi: cảm ơn hội đồng, dù kết quả thế nào.
+
+CHÚC EM BẢO VỆ THÀNH CÔNG!
+
+================================================================================
+END OF FILE
+================================================================================
