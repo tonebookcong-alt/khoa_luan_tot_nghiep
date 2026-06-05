@@ -2,6 +2,36 @@
 
 **Sinh viên:** Ngô Tuấn Huy — **GVHD:** ĐOÀN HOÀNG DUY
 
+## 📝 Giới thiệu khóa luận tốt nghiệp
+
+**PhoneMarket** là một nền tảng thương mại điện tử chuyên biệt dành cho việc mua bán, trao đổi và định giá điện thoại di động đã qua sử dụng tích hợp công nghệ Trí tuệ Nhân tạo (AI). Dự án nhằm giải quyết bài toán định giá điện thoại cũ một cách khách quan, minh bạch và tự động hóa quy trình giao dịch giữa người mua và người bán.
+
+### 🌟 Các tính năng nổi bật tích hợp AI
+
+1. **Định giá điện thoại tự động bằng Trí tuệ nhân tạo (AI Valuation):**
+   * **Phân tích ngoại quan qua hình ảnh (Vision AI):** Tích hợp mô hình học máy **YOLOv8** (sử dụng các bộ trọng số đã huấn luyện chuyên biệt `best_v1.pt` và `best_damage.pt`) để tự động phân tích hình ảnh thực tế của điện thoại, nhận diện chính xác các lỗi như nứt màn hình, trầy xước mặt lưng, cấn móp viền.
+   * **Thuật toán định giá thông minh:** Kết hợp kết quả đánh giá ngoại quan của AI cùng các thông số cấu hình phần cứng (dung lượng pin, bộ nhớ, dòng máy, tình trạng bảo hành) để đưa ra mức giá đề xuất tối ưu và sát với thị trường nhất.
+
+2. **Hỗ trợ giao dịch và thu cũ đổi mới (Trade-in Platform):**
+   * Quy trình thu cũ đổi mới trực quan, cho phép người dùng tự thẩm định giá điện thoại cũ của mình tại nhà và nhận gợi ý lên đời các dòng máy mới phù hợp.
+   * Hệ thống đăng tin và quản lý sản phẩm mua bán rõ ràng, tiện lợi.
+
+3. **Trợ lý tư vấn mua sắm thông minh (AI Assistant):**
+   * Tích hợp chatbot tư vấn thông minh giúp người dùng so sánh các dòng máy, phân tích nhu cầu sử dụng và gợi ý sản phẩm tối ưu trong tầm giá.
+
+### 🛠️ Kiến trúc hệ thống và Công nghệ sử dụng
+
+Hệ thống được thiết kế theo kiến trúc Microservices chia tách rõ rệt các dịch vụ nghiệp vụ và dịch vụ xử lý AI:
+
+* **Frontend:** **Next.js** (React) - Tối ưu hóa trải nghiệm người dùng, tải trang nhanh và giao diện tương thích tốt trên mọi thiết bị.
+* **Backend Service:** **NestJS / Node.js** kết hợp với **Prisma ORM** - Quản lý toàn bộ cơ sở dữ liệu nghiệp vụ, phân quyền bảo mật chặt chẽ.
+* **AI Service (FastAPI - Python):** Dịch vụ xử lý ảnh chuyên biệt đảm nhận nhiệm vụ chạy mô hình thị giác máy tính YOLOv8.
+* **AI Chat Service:** Dịch vụ tích hợp các mô hình ngôn ngữ lớn (LLM) để vận hành chatbot tư vấn.
+* **Hệ thống cơ sở dữ liệu:**
+  * **PostgreSQL:** Lưu trữ dữ liệu quan hệ (người dùng, sản phẩm, hóa đơn, bài viết).
+  * **MongoDB:** Lưu trữ dữ liệu phi cấu trúc phục vụ cho log định giá và hội thoại AI.
+  * **Redis:** Caching dữ liệu, quản lý phiên đăng nhập và tối ưu hóa hiệu năng truy vấn.
+
 ---
 
 ## Cài phần mềm
